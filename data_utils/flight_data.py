@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 # from pyairports.airports import Airports
 import airportsdata
 
+import copy
+
 
 class FlightData:
 
@@ -37,15 +39,19 @@ class FlightData:
             tzinfo=timezone.utc)
         self.duration = int(stem_list[3]) # in seconds
 
+        def path_from_prefix(prefix):
+            return Path(data_dir, prefix + '_' + self.file_stem + '.csv')
 
-        self.iff_path = Path(data_dir, 'IFF_' + self.file_stem + '.csv')
-        self.rd_path = Path(data_dir, 'RD_' + self.file_stem + '.csv')
-        self.ev_path = Path(data_dir, 'EV_' + self.file_stem + '.csv')
+        self.iff_path = path_from_prefix('IFF')
+        self.rd_path = path_from_prefix('RD')
+        self.ev_path = path_from_prefix('EV')
 
         # trackpoints data
-        self.tp_path = Path(data_dir, 'TP_' + self.file_stem + '.csv')
+        self.tp_path = path_from_prefix('TP')
         # merged cleaned data
-        self.mc_path = Path(data_dir, 'MC_' + self.file_stem + '.csv')
+        self.mc_path = path_from_prefix('MC')
+        # resampled data
+        self.rs_path = path_from_prefix('RS')
 
         self.iff_cols = {} # index on recType
         self.iff_cols_idx = {}
@@ -111,7 +117,21 @@ class FlightData:
         self.tp_cols = self.iff_cols[3]
         self.tp_cols_idx = self.iff_cols_idx[3]
 
+        self.mc_dtypes = {
+            'recTime':'Float64',
+            'fltKey':'Int32',
+            'cid':str,
+            'acId':str,
+            'coord1':'Float64',
+            'coord2':'Float64',
+            'alt':'Float64',
+            'significance':'Int8',
+            'groundSpeed':'Int16',
+            'course':'Int16',
+        }
 
+
+    # requires IFF
     def make_trackpoints_csv(self, max_significance=6):
 
         with open(self.iff_path, 'r') as iff_file, open(self.tp_path, 'w+') as tp_file:
@@ -124,6 +144,8 @@ class FlightData:
                     if data[0] == '3' and int(data[12]) < max_significance:
                         tp_file.write(line)
 
+
+    # requires TP and RD
     def make_merged_cleaned_csv(self):
 
         df_rd = pd.read_csv(self.rd_path, usecols=["Msn", "Orig", "EstOrig", "Dest", "EstDest"])
@@ -185,25 +207,17 @@ class FlightData:
         # print(df_rd.loc['KSFO','KBOS'])
         print(f'accepted {accept_rd} / {total_rd}')
 
-        clean_dtypes = {
-            'recTime':'Float64',
-            'fltKey':'Int64',
-            'cid':'Int64',
-            'acId':str,
-            'coord1':'Float64',
-            'coord2':'Float64',
-            'alt':'Float64',
-            'significance':'Int64',
-            'groundSpeed':'Int64',
-            'course':'Int64',
-        }
-        names = [*clean_dtypes]
+        names = [*self.mc_dtypes]
         cleaned_idx = [self.tp_cols_idx[name] for name in names]
 
         # uhh see what the issue was with the dtypes later
         df_tp = pd.read_csv(self.tp_path, 
                             usecols=cleaned_idx, 
-                            names=names)
+                            names=names,
+                            dtype=self.mc_dtypes)
+        df_tp.dropna(inplace=True)
+        # df_tp = df_tp.astype(clean_dtypes)
+
         df_tp.set_index(['fltKey'], inplace=True)
 
         # default inner join -- ?
@@ -215,4 +229,11 @@ class FlightData:
         df.to_csv(self.mc_path)
 
 
+    # requires MC
+    def make_resampled_csv(self):
+        
+        df = pd.read_csv(self.mc_path, dtype=self.mc_dtypes)
+        df.set_index(['orig','dest','fltKey'], inplace=True)
+        df['recTime'] = pd.to_datetime(df['recTime'], unit='s')
 
+        print(df)
