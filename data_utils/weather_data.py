@@ -3,14 +3,13 @@ from pathlib import Path
 import tqdl
 
 import pandas as pd
-from scipy.spatial.distance import cdist
+import csv
 
 import airportsdata as apd
 
 apd_iata = apd.load('IATA')
 apd_icao = apd.load('ICAO')
 
-import csv
 
 def generate_station_list_csvs():
     for stem in ("ghcnh-station-list", "lcdv2-station-list"):
@@ -155,6 +154,22 @@ def dl_noaa(dataset, out_base_dir, station_id, station_name=None,
 
 dl_noaa_lcdv2 = functools.partial(dl_noaa, "lcdv2")
 dl_noaa_ghcnh = functools.partial(dl_noaa, "ghcnh")
+
+def dl_noaa_lcdv2_iata(data_dir, code):
+    id = iata_to_lcdv2_id(code)
+    return dl_noaa_lcdv2(data_dir, id, code)
+
+def dl_noaa_ghcnh_iata(data_dir, code):
+    id = iata_to_ghcnh_id(code)
+    return dl_noaa_ghcnh(data_dir, id, code)
+
+def dl_noaa_lcdv2_icao(data_dir, code):
+    id = icao_to_lcdv2_id(code)
+    return dl_noaa_lcdv2(data_dir, id, code)
+
+def dl_noaa_ghcnh_icao(data_dir, code):
+    id = iata_to_ghcnh_id(code)
+    return dl_noaa_ghcnh(data_dir, id, code)
 
 # https://www.ncei.noaa.gov/oa/local-climatological-data/v2/doc/lcdv2_DOCUMENTATION.pdf
 
