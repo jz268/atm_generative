@@ -171,6 +171,22 @@ def dl_noaa_ghcnh_icao(data_dir, code):
     id = iata_to_ghcnh_id(code)
     return dl_noaa_ghcnh(data_dir, id, code)
 
+def dl_noaa_lcdv2_airport(data_dir, code):
+    if len(code) == 3:
+        return dl_noaa_lcdv2_iata(data_dir, code)
+    elif len(code) == 4:
+        return dl_noaa_lcdv2_icao(data_dir, code)
+    else:
+        raise ValueError('invalid airport code?')
+    
+def dl_noaa_ghcnh_airport(data_dir, code):
+    if len(code) == 3:
+        return dl_noaa_ghcnh_iata(data_dir, code)
+    elif len(code) == 4:
+        return dl_noaa_ghcnh_icao(data_dir, code)
+    else:
+        raise ValueError('invalid airport code?')
+
 # https://www.ncei.noaa.gov/oa/local-climatological-data/v2/doc/lcdv2_DOCUMENTATION.pdf
 
 

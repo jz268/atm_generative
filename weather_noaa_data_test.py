@@ -1,4 +1,4 @@
-from data_utils.weather_data import *
+from data_utils.weather_noaa_data import *
 from pathlib import Path
 
 
@@ -12,5 +12,5 @@ data_dir = Path('data/noaa_lcdv2').resolve()
 # dl_noaa_lcdv2(data_dir, "USW00023234", "SFO")
 # dl_noaa_lcdv2(data_dir, "USW00014739", "BOS")
 
-dl_noaa_lcdv2_iata(data_dir, 'LAX')
-dl_noaa_lcdv2_iata(data_dir, 'JFK')
+dl_noaa_lcdv2_airport(data_dir, 'LAX')
+dl_noaa_lcdv2_airport(data_dir, 'JFK')
