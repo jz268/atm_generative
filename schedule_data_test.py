@@ -1,26 +1,62 @@
+import dask.dataframe as dd
 import pandas as pd
-
 import airportsdata
-apd_iata = airportsdata.load('IATA')  # key is the IATA location code
 
-df_id = pd.read_csv('data_utils/schedule_lut/L_AIRPORT_ID.csv')
-df_iata = pd.read_csv('data_utils/schedule_lut/L_AIRPORT_IATA.csv')
+from tqdm.dask import TqdmCallback
 
-df = pd.merge(df_id, df_iata, how='inner', left_on='Description', right_on='City: Airport')
-df.drop('Description', inplace=True, axis=1)
-# df.reset_index(drop=True, inplace=True)
+cb = TqdmCallback(desc="global")
+cb.register()
 
-df.rename({'Code_x': 'id', 'Code_y': 'iata', 'City: Airport': 'description'}, axis=1, inplace=True)
+from pathlib import Path
+from data_utils.schedule_data import *
 
-def try_wac_to_icao(code):
-    if code in apd_iata:
-        return apd_iata.get(code)['icao']
-    return None
+# is origina nd dest in iata?
 
-df.insert(loc=2, column='icao', value=df['iata'].apply(try_wac_to_icao))
+columns = [
+    'Year', 'Quarter', 'Month', 'DayofMonth', 'DayOfWeek', 'FlightDate',
+    'Reporting_Airline', 'DOT_ID_Reporting_Airline', 'IATA_CODE_Reporting_Airline',
+    'Tail_Number', 'Flight_Number_Reporting_Airline',
+    'Origin', 'Dest',
+    'CRSDepTime', 'DepTime', 'DepDelay', 'DepDelayMinutes',
+    'TaxiOut', 'TaxiIn',
+    'CRSArrTime', 'ArrTime', 'ArrDelay', 'ArrDelayMinutes',
+    'Cancelled', 'CancellationCode', 'Diverted',
+    'CRSElapsedTime', 'ActualElapsedTime', #'AirTime',
+    'Distance',
+    'CarrierDelay', 'WeatherDelay', 'NASDelay', 'SecurityDelay', 'LateAircraftDelay',
+    'DivReachedDest', 'DivActualElapsedTime', 'DivArrDelay', 'DivDistance',
+]
 
-df = df[df.icao.notnull()]
 
-print(df)
 
-df.to_csv('data_utils/schedule_lut/L_AIRPORT_ID_IATA_ICAO.csv')
+ssd_base_dir = Path('/Volumes/SN850X/').resolve()
+airline_path = Path(ssd_base_dir / 'airline.csv')
+
+# lax_id = airport_to_id('LAX')
+# jfk_id = airport_to_id('JFK')
+
+# ddf = dd.read_csv(airline_path, header=0,
+#         dtype={'CancellationCode': 'str',
+#             'Div1Airport': 'str',
+#             'Div1TailNum': 'str',
+#             'Div2Airport': 'str',
+#             'Div2TailNum': 'str',
+#             'Div3Airport': 'str',
+#             'Div3TailNum': 'str',
+#             'Tail_Number': 'str',
+#             'DestStateFips': 'float64',
+#             'OriginStateFips': 'float64'})
+# print(ddf.npartitions)
+
+ddf = dd.read_csv(airline_path, header=0, 
+            encoding='latin-1',assume_missing=True,
+            dtype={'CancellationCode': 'str', 'Tail_Number': 'str'})
+
+ddf = ddf[columns]
+
+ddf = ddf[(ddf['Origin'] == 'LAX') &
+          (ddf['Dest'] == 'JFK') ]
+
+df = ddf.compute()
+
+df.to_csv('data/schedule/lax_to_jfk_full.csv')

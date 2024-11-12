@@ -3,7 +3,43 @@ import sys
 from pathlib import Path
 
 
-apt_codes = pd.read_csv(Path(Path(__file__).parent, 'schedule_lut/L_AIRPORT_ID_IATA_ICAO'))
+apt_ids = pd.read_csv(Path(Path(__file__).parent, 'schedule_lut/L_AIRPORT_ID_IATA_ICAO.csv'))
+
+def airport_to_id(code):
+    if len(code) == 3:
+        return apt_ids.loc[apt_ids['iata']==code, 'id'].iloc[0]
+    elif len(code) == 4:
+        return apt_ids.loc[apt_ids['icao']==code, 'id'].iloc[0]
+    else:
+        raise ValueError("invalid code?")
+    
+# # LUT generation stuff??
+
+# apd_iata = airportsdata.load('IATA')  # key is the IATA location code
+
+# df_id = pd.read_csv('data_utils/schedule_lut/L_AIRPORT_ID.csv')
+# df_iata = pd.read_csv('data_utils/schedule_lut/L_AIRPORT_IATA.csv')
+
+# df = pd.merge(df_id, df_iata, how='inner', left_on='Description', right_on='City: Airport')
+# df.drop('Description', inplace=True, axis=1)
+# # df.reset_index(drop=True, inplace=True)
+
+# df.rename({'Code_x': 'id', 'Code_y': 'iata', 'City: Airport': 'description'}, axis=1, inplace=True)
+
+# def try_wac_to_icao(code):
+#     if code in apd_iata:
+#         return apd_iata.get(code)['icao']
+#     return None
+
+# df.insert(loc=2, column='icao', value=df['iata'].apply(try_wac_to_icao))
+
+# df = df[df.icao.notnull()]
+
+# print(df)
+
+# df.to_csv('data_utils/schedule_lut/L_AIRPORT_ID_IATA_ICAO.csv')
+
+
 
 # this is not great fix rhis
 def clean_airline_2m(data_path):
