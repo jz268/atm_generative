@@ -179,9 +179,11 @@ for time, time_zone in \
      ('CRSDepTime', 'America/Los_Angeles'), ('DepTime', 'America/Los_Angeles')]:
     time_abs = time + 'Absolute'
     print(df[time_abs].dtypes)
-    # ugh deal with ambiguous later let's just guess it's forward?
+    # ugh let's just drop the ambiguous for now
     df[time_abs] = df[time_abs].dt.tz_localize(
-        time_zone, ambiguous='NaT', nonexistent='shift_forward').dt.tz_convert("UTC")
+        time_zone, ambiguous='NaT', nonexistent='NaT').dt.tz_convert("UTC")
+    df = df.dropna(subset=[time_abs])
+
 
 # df = df.drop('FlightDate', axis=1)
 df.reset_index(drop=True, inplace=True)

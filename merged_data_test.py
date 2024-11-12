@@ -5,9 +5,44 @@ import sys
 from tqdm import tqdm
 
 
-schedule = pd.read_csv('data/schedule/lax_to_jfk_cleaned.csv', 
-                 parse_dates=['CRSDepTimeAbsolute', 'CRSArrTimeAbsolute', 
-                              'DepTimeAbsolute', 'ArrTimeAbsolute'])
+dtype = {
+    'Year': 'Int16', 
+    'Quarter': 'Int8', 
+    'Month': 'Int8', 
+    'DayofMonth': 'Int8', 
+    'DayOfWeek': 'Int8', 
+    'FlightDate': 'str',
+
+    'Reporting_Airline': 'str', 
+
+    'CRSDepTime': 'Int16', 
+    'DepTime': 'Int16', 
+    'DepDelay': 'Int16', 
+    'DepDelayMinutes': 'Int16',
+
+    'CRSArrTime': 'Int16', 
+    'ArrTime': 'Int16', 
+    'ArrDelay': 'Int16', 
+    'ArrDelayMinutes': 'Int16',
+
+    'CarrierDelay': 'Int16', 
+    'WeatherDelay': 'Int16', 
+    'NASDelay': 'Int16', 
+    'SecurityDelay': 'Int16', 
+    'LateAircraftDelay': 'Int16',
+
+    'Diverted': 'Int8',
+    'DivArrDelay': 'Int16', 
+    'DivDistance': 'Int16',
+}
+
+abs_time_cols = ['CRSDepTimeAbsolute', 'CRSArrTimeAbsolute', 
+                 'DepTimeAbsolute', 'ArrTimeAbsolute']
+
+cols = list(dtype.keys()) + abs_time_cols
+
+schedule = pd.read_csv('data/schedule/lax_to_jfk_full_cleaned.csv', 
+                dtype=dtype, usecols=cols, parse_dates=abs_time_cols)
 merged = schedule
 
 weather_lax = pd.read_csv('data/noaa_lcdv2/LCD_LAX_1987-2023_CLEANED.csv', 
@@ -41,14 +76,6 @@ merged = pd.merge_asof(
 
 merged = merged.fillna(0)
 
-# ArrDelay,ArrDelayMinutes,
-# CarrierDelay,WeatherDelay,NASDelay,SecurityDelay,LateAircraftDelay,
-# DepDelay,DepDelayMinutes,DivDistance,DivArrDelay
-
-# all_cols = schedule.columns.values.tolist() \
-#             + weather_lax.columns.values.tolist() \
-#             + weather_jfk.columns.values.tolist()
-
 merged_cols = merged.columns.values.tolist()
 print(merged_cols)
 
@@ -60,9 +87,9 @@ date_cols = [
 ]
 
 response_cols = [
-    'ArrDelay', 'ArrDelayMinutes', 'CarrierDelay', 
-    'WeatherDelay', 'NASDelay', 'SecurityDelay', 'LateAircraftDelay',
-    'DepDelay', 'DepDelayMinutes', 'DivDistance', 'DivArrDelay'
+    'ArrDelay', 'ArrDelayMinutes', 'DepDelay', 'DepDelayMinutes',
+    'CarrierDelay', 'WeatherDelay', 'NASDelay', 'SecurityDelay', 'LateAircraftDelay', 
+    'Diverted', 'DivDistance', 'DivArrDelay',
 ]
 
 explanatory_cols = [col for col in merged_cols 
@@ -76,9 +103,10 @@ df = merged
 for rcol in tqdm(response_cols, position=0, desc="Y", leave=False):
     for ecol in tqdm(explanatory_cols, position=1, desc="X", leave=False):
         # print(rcol, ecol)
-        corr = df[rcol].corr(df[ecol])
         plt.clf()
-        plt.title(f'{rcol} vs. {ecol}, ρ={corr:.4f}')
+        # corr = df[rcol].corr(df[ecol])
+        # plt.title(f'{rcol} vs. {ecol}, ρ={corr:.4f}')
+        plt.title(f'{rcol} vs. {ecol}')
         plt.xlabel(ecol)
         plt.ylabel(rcol)
         plt.scatter(merged[ecol], merged[rcol])
