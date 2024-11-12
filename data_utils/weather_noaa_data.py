@@ -8,6 +8,7 @@ import csv
 import sys
 
 import airportsdata as apd
+import timezonefinder, pytz
 
 apd_iata = apd.load('IATA')
 apd_icao = apd.load('ICAO')
@@ -193,6 +194,14 @@ def dl_noaa_ghcnh_airport(data_dir, code):
 
 
 
+def get_tz(lat, lon):
+    tf = timezonefinder.TimezoneFinder()
+    timezone_str = tf.certain_timezone_at(lat=lat, lng=lon)
+    if timezone_str is None:
+        raise ValueError("Could not determine the time zone")
+    return timezone_str
+
+
 # uses: https://www.kaggle.com/datasets/zhaodianwen/noaaweatherdatajfkairport/data
 
 def tryconvert(value, dt=None):
@@ -211,6 +220,9 @@ def clean_noaa_lcdv2_file(data_path, verbose=False):
 
     import_columns = [  
         'DATE',
+        'LATITUDE',
+        'LONGITUDE',
+
         'HourlyVisibility',
 
         'HourlyDryBulbTemperature',
@@ -266,6 +278,12 @@ def clean_noaa_lcdv2_file(data_path, verbose=False):
     data_weather = pd.read_csv(data_path, parse_dates=['DATE'], usecols=import_columns)
     data_weather = data_weather.set_index(pd.DatetimeIndex(data_weather['DATE']))
     data_weather.drop(['DATE'], axis=1, inplace=True)
+
+    time_zone = get_tz(data_weather['LATITUDE'].iloc[0], data_weather['LONGITUDE'].iloc[0])
+    data_weather.drop(['LATITUDE', 'LONGITUDE'], axis=1, inplace=True)
+
+    # uhh i guess ignore ambiguous for now
+    data_weather = data_weather.tz_localize(time_zone, ambiguous='NaT').tz_convert("UTC")
     
     # Replace '*' values with np.nan
     data_weather.replace(to_replace='*', value=np.nan, inplace=True)

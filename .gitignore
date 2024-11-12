@@ -1,3 +1,6 @@
 data/
+!/data/noaa_lcdv2/*_CLEANED.csv
+!/data/schedule/*_cleaned.csv
+
 __pycache__/
 .DS_Store

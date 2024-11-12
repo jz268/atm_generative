@@ -8,6 +8,7 @@ df_iata = pd.read_csv('data_utils/schedule_lut/L_AIRPORT_IATA.csv')
 
 df = pd.merge(df_id, df_iata, how='inner', left_on='Description', right_on='City: Airport')
 df.drop('Description', inplace=True, axis=1)
+# df.reset_index(drop=True, inplace=True)
 
 df.rename({'Code_x': 'id', 'Code_y': 'iata', 'City: Airport': 'description'}, axis=1, inplace=True)
 
