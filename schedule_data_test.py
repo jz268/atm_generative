@@ -12,6 +12,11 @@ from data_utils.schedule_data import *
 
 # is origina nd dest in iata?
 
+
+ssd_base_dir = Path('/Volumes/SN850X/').resolve()
+airline_path = Path(ssd_base_dir / 'airline.csv')
+
+
 columns = [
     'Year', 'Quarter', 'Month', 'DayofMonth', 'DayOfWeek', 'FlightDate',
     'Reporting_Airline', 'DOT_ID_Reporting_Airline', 'IATA_CODE_Reporting_Airline',
@@ -27,30 +32,13 @@ columns = [
     'DivReachedDest', 'DivActualElapsedTime', 'DivArrDelay', 'DivDistance',
 ]
 
-
-
-ssd_base_dir = Path('/Volumes/SN850X/').resolve()
-airline_path = Path(ssd_base_dir / 'airline.csv')
+dtypes = {col: 'str' for col in columns}
 
 # lax_id = airport_to_id('LAX')
 # jfk_id = airport_to_id('JFK')
 
-# ddf = dd.read_csv(airline_path, header=0,
-#         dtype={'CancellationCode': 'str',
-#             'Div1Airport': 'str',
-#             'Div1TailNum': 'str',
-#             'Div2Airport': 'str',
-#             'Div2TailNum': 'str',
-#             'Div3Airport': 'str',
-#             'Div3TailNum': 'str',
-#             'Tail_Number': 'str',
-#             'DestStateFips': 'float64',
-#             'OriginStateFips': 'float64'})
-# print(ddf.npartitions)
-
 ddf = dd.read_csv(airline_path, header=0, 
-            encoding='latin-1',assume_missing=True,
-            dtype={'CancellationCode': 'str', 'Tail_Number': 'str'})
+            encoding='latin-1', dtype=dtypes)
 
 ddf = ddf[columns]
 
