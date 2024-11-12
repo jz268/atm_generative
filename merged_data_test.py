@@ -96,20 +96,38 @@ explanatory_cols = [col for col in merged_cols
                     if col not in response_cols 
                     and col not in date_cols]
 
-plt.figure()
-
 df = merged
 
-for rcol in tqdm(response_cols, position=0, desc="Y", leave=False):
-    for ecol in tqdm(explanatory_cols, position=1, desc="X", leave=False):
-        # print(rcol, ecol)
-        plt.clf()
-        # corr = df[rcol].corr(df[ecol])
-        # plt.title(f'{rcol} vs. {ecol}, ρ={corr:.4f}')
-        plt.title(f'{rcol} vs. {ecol}')
-        plt.xlabel(ecol)
-        plt.ylabel(rcol)
-        plt.scatter(merged[ecol], merged[rcol])
-        plt.savefig(f'media/Y={rcol}_X={ecol}.png')
+# plt.figure()
+# for rcol in tqdm(response_cols, position=0, desc="Y", leave=False):
+#     for ecol in tqdm(explanatory_cols, position=1, desc="X", leave=False):
+#         # print(rcol, ecol)
+#         plt.clf()
+#         # corr = df[rcol].corr(df[ecol])
+#         # plt.title(f'{rcol} vs. {ecol}, ρ={corr:.4f}')
+#         plt.title(f'{rcol} vs. {ecol}')
+#         plt.xlabel(ecol)
+#         plt.ylabel(rcol)
+#         plt.scatter(merged[ecol], merged[rcol])
+#         plt.savefig(f'media/Y={rcol}_X={ecol}.png')
+# plt.close()
 
+# plt.figure()
+# for col in tqdm(merged_cols):
+#     plt.clf()
+#     plt.hist(x=df[col], bins='auto')
+#     plt.title(f'Histogram for {col}')
+#     plt.xlabel(col)
+#     plt.ylabel('Frequency')
+#     plt.savefig(f'media/Histogram_{col}.png')
+# plt.close()
+
+plt.figure()
+for col in tqdm(response_cols):
+    plt.clf()
+    plt.hist(x=df.loc[df[col]>0, col], bins='auto')
+    plt.title(f'Histogram for Positive {col}')
+    plt.xlabel(col)
+    plt.ylabel('Frequency')
+    plt.savefig(f'media/Positive_Histogram_{col}.png')
 plt.close()
