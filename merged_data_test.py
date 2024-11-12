@@ -5,61 +5,6 @@ import sys
 from tqdm import tqdm
 
 
-
-# # # clean lax to jfk, deal with tghis later
-
-# dtype = {
-#     'CRSArrTime':'Int16',
-#     'ArrTime':'Int16',
-#     'CRSDepTime':'Int16',
-#     'DepTime':'Int16',
-#     'ArrDelay':'Int16',
-#     'DepDelay':'Int16',
-# }
-
-# df = pd.read_csv('data/schedule/lax_to_jfk.csv', dtype=dtype)
-# df = df.dropna(subset=['CRSArrTime', 'ArrTime', 'CRSDepTime', 'DepTime'])
-# df = df.drop(['Origin','Dest'], axis=1)
-
-# # i think all times are local to time zone? so just need to fix the day when needed
-# for time in ['CRSArrTime', 'ArrTime', 'CRSDepTime', 'DepTime']:
-#     time_abs = time + 'Absolute'
-#     df[time_abs] = df[time].apply(lambda x: min(2359, x)) # roudn down i guess
-#     # n = 738
-#     # print(df['FlightDate'].iloc[n]+df[time_abs].astype(str).str.zfill(4).iloc[n])
-#     df[time_abs] = pd.to_datetime(
-#         df['FlightDate']+(df[time_abs].astype(str).str.zfill(4)), format='%Y-%m-%d%H%M')
-
-# # if arr < dep time, then arrival is next day?
-# for dep, arr in [('CRSDepTime', 'CRSArrTime'), ('DepTime', 'ArrTime')]:
-#     dep_abs, arr_abs = dep + 'Absolute', arr + 'Absolute'
-#     df[arr_abs] = df.apply(lambda row: 
-#                     row[arr_abs] if row[dep] < row[arr]
-#                     else row[arr_abs] + pd.Timedelta(days=1), axis=1)
-            
-# for time, time_zone in \
-#     [('CRSArrTime', 'America/New_York'), ('ArrTime', 'America/New_York'),
-#      ('CRSDepTime', 'America/Los_Angeles'), ('DepTime', 'America/Los_Angeles')]:
-#     time_abs = time + 'Absolute'
-#     print(df[time_abs].dtypes)
-#     df[time_abs] = df[time_abs].dt.tz_localize(time_zone, ambiguous='infer').dt.tz_convert("UTC")
-
-# # df = df.drop('FlightDate', axis=1)
-# df.reset_index(drop=True, inplace=True)
-
-# print(df)
-# print( str(round(sys.getsizeof(df) / 1000000,2)) + ' mb')
-
-# df.to_csv('data/schedule/lax_to_jfk_cleaned.csv', index=False)
-
-
-
-# Month,DayOfWeek,Reporting_Airline,
-# CRSDepTime,CRSArrTime,DepTime,ArrTime,
-# ArrDelay,ArrDelayMinutes,
-# CarrierDelay,WeatherDelay,NASDelay,SecurityDelay,LateAircraftDelay,
-# DepDelay,DepDelayMinutes,DivDistance,DivArrDelay
-
 schedule = pd.read_csv('data/schedule/lax_to_jfk_cleaned.csv', 
                  parse_dates=['CRSDepTimeAbsolute', 'CRSArrTimeAbsolute', 
                               'DepTimeAbsolute', 'ArrTimeAbsolute'])
