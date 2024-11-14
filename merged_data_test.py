@@ -122,12 +122,24 @@ df = merged
 #     plt.savefig(f'media/Histogram_{col}.png')
 # plt.close()
 
+
+# plt.figure()
+# for col in tqdm(response_cols):
+#     plt.clf()
+#     plt.hist(x=df.loc[df[col]>0, col], bins='auto')
+#     plt.title(f'Histogram for Positive {col}')
+#     plt.xlabel(col)
+#     plt.ylabel('Frequency')
+#     plt.savefig(f'media/Positive_Histogram_{col}.png')
+# plt.close()
+
+
 plt.figure()
 for col in tqdm(response_cols):
     plt.clf()
-    plt.hist(x=df.loc[df[col]>0, col], bins='auto')
-    plt.title(f'Histogram for Positive {col}')
+    plt.hist(x=df.loc[df[col]>=15, col], bins='auto')
+    plt.title(f'Histogram for Late {col}')
     plt.xlabel(col)
     plt.ylabel('Frequency')
-    plt.savefig(f'media/Positive_Histogram_{col}.png')
+    plt.savefig(f'media/Late_Histogram_{col}.png')
 plt.close()
