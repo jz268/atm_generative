@@ -218,12 +218,12 @@ df = merged
 # plt.clf()
 
 df['YearCat'] = df['Year']
-explanatory_cols.append('YearCat')
+# explanatory_cols.append('YearCat')
 
 categorical_vars = [
-    'Reporting_Airline', 'Quarter', 
+    'Reporting_Airline',  
     'LAX_HourlyPressureTendency', 'JFK_HourlyPressureTendency',
-    'Month', 'DayOfWeek', 'YearCat'
+    'Quarter', 'Month', 'DayOfWeek', 'YearCat'
 ]
 for col in categorical_vars:
     df[col] = df[col].astype("category")
@@ -240,7 +240,7 @@ df_full = df
 
 for response in responses:
 
-    print(f"\n============  {response}  ============\n")
+    print(f"\n=============  {response}  =============\n")
 
     # df = df_full.loc[merged[response]>0]
 
@@ -310,14 +310,14 @@ for response in responses:
     # reg = reg_from_autotuned_hyperparams()
 
     reg=xgb.XGBRegressor(
-        n_estimators = 1000, 
-        max_depth = 6, 
+        n_estimators = 5000, 
+        max_depth = 5, 
         gamma = .9,
         min_child_weight = 1,
         reg_alpha = 5,
         colsample_bytree = .75,
         early_stopping_rounds = 10,
-        learning_rate = .05,
+        learning_rate = .1,
         seed = 0,
         enable_categorical=True)
 
@@ -339,11 +339,10 @@ for response in responses:
 
     rmse = np.sqrt(mean_squared_error(y_train, reg.predict(X_train)))
     score = reg.score(X_train,y_train)
-    print(f" train -- score: {score}; rmse: {rmse:.4f}")
+    print(f"   train -- score: {score:.4f}; rmse: {rmse:.2f}")
     rmse = np.sqrt(mean_squared_error(y_test, reg.predict(X_test)))
     score = reg.score(X_test,y_test)
-    print(f"  test -- score: {score}; rmse: {rmse:.4f}")
-    print("\n")
+    print(f"    test -- score: {score:.4f}; rmse: {rmse:.2f}\n")
 
     for year in range(1987, 2021):
         # if year <= 2003 or year == 2017: continue
