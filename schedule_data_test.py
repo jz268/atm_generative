@@ -161,18 +161,25 @@ df = df.dropna(subset=['CRSArrTime', 'ArrTime', 'CRSDepTime', 'DepTime'])
 # i think all times are local to time zone? so just need to fix the day when needed
 for time in ['CRSArrTime', 'ArrTime', 'CRSDepTime', 'DepTime']:
     time_abs = time + 'Absolute'
-    df[time_abs] = df[time].apply(lambda x: min(2359, x)) # roudn down i guess
+    df[time_abs] = df[time].clip(upper=2359)
     # n = 738
     # print(df['FlightDate'].iloc[n]+df[time_abs].astype(str).str.zfill(4).iloc[n])
     df[time_abs] = pd.to_datetime(
         df['FlightDate']+(df[time_abs].astype(str).str.zfill(4)), format='%Y-%m-%d%H%M')
+    
+for time in ['CRSArrTime', 'ArrTime', 'CRSDepTime', 'DepTime']:
+    time_min = time + 'Minutes'
+    df[time_min] = (df[time]//100)*60 + (df[time]%100)
 
 # if arr < dep time, then arrival is next day?
 for dep, arr in [('CRSDepTime', 'CRSArrTime'), ('DepTime', 'ArrTime')]:
     dep_abs, arr_abs = dep + 'Absolute', arr + 'Absolute'
-    df[arr_abs] = df.apply(lambda row: 
-                    row[arr_abs] if row[dep] < row[arr]
-                    else row[arr_abs] + pd.Timedelta(days=1), axis=1)
+    # df[arr_abs] = df.apply(lambda row: 
+    #                 row[arr_abs] if row[dep] < row[arr]
+    #                 else row[arr_abs] + pd.Timedelta(days=1), axis=1)
+    df.loc[df[dep] < df[arr], arr_abs] += pd.Timedelta(days=1)
+    dep_min, arr_min = dep + 'Minutes', arr + 'Minutes'
+    df.loc[df[arr_min] < df[dep_min], arr_min] += 24*60
             
 for time, time_zone in \
     [('CRSArrTime', 'America/New_York'), ('ArrTime', 'America/New_York'),
