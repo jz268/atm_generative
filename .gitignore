@@ -9,5 +9,8 @@ data/noaa_lcdv2/*
 data/schedule/*
 !data/schedule/lax_to_jfk*
 
+!data/avmet_simwx
+!data/avmet_simwx_videos
+
 __pycache__/
 .DS_Store

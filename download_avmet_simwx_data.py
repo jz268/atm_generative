@@ -49,16 +49,15 @@ def download_videos(data_dir, start_date, end_date):
     @sleep_and_retry
     @limits(calls=c, period=p)
     def download_video(date):
-        year, month, day = date[:4], date[5:7], date[8:9]
+        year, month, day = date[:4], date[5:7], date[8:10]
         url = f'https://data.avmet.com/simwx/static/data/videos/{year}/{month}/{year}{month}{day}.mp4'
-        content = requests.get(url, stream=True).content
+        content = requests.get(url).content
         file_path = date_path(data_dir, date, 'mp4')
         with open(file_path, 'wb') as f:
-            content = requests.get(url, stream=True).content
             f.write(content)
     print(f"rate limited to {c} calls per {p} seconds...")
 
-    for date in dates:
+    for date in tqdm(dates):
         download_video(date)
 
 
@@ -82,9 +81,12 @@ if __name__ == '__main__':
     # data_dir = Path(ssd_base_dir / 'avmet_simwx/')
 
     data_dir = Path('data/avmet_simwx/').resolve()
+    start_date = '2022-11-08' #'2017-01-01' # picking up where left off...
+    end_date = '2024-11-19'
+    download_scores(data_dir, start_date, end_date)
+    # read_scores(data_dir, start_date, end_date)
+
+    videos_dir = Path('data/avmet_simwx_videos/').resolve()
     start_date = '2017-01-01'
     end_date = '2024-11-19'
-
-    download_scores(data_dir, start_date, end_date)
-
-    # read_scores(data_dir, start_date, end_date)
+    download_videos(videos_dir, start_date, end_date)
