@@ -8,7 +8,8 @@ import csv
 import sys
 
 import airportsdata as apd
-import timezonefinder, pytz
+# import timezonefinder, pytz
+from data_utils.tz_utils import get_tz
 
 apd_iata = apd.load('IATA')
 apd_icao = apd.load('ICAO')
@@ -194,12 +195,12 @@ def dl_noaa_ghcnh_airport(data_dir, code):
 
 
 
-def get_tz(lat, lon):
-    tf = timezonefinder.TimezoneFinder()
-    timezone_str = tf.certain_timezone_at(lat=lat, lng=lon)
-    if timezone_str is None:
-        raise ValueError("Could not determine the time zone")
-    return timezone_str
+# def get_tz(lat, lon):
+#     tf = timezonefinder.TimezoneFinder()
+#     timezone_str = tf.certain_timezone_at(lat=lat, lng=lon)
+#     if timezone_str is None:
+#         raise ValueError("Could not determine the time zone")
+#     return timezone_str
 
 
 # uses: https://www.kaggle.com/datasets/zhaodianwen/noaaweatherdatajfkairport/data
