@@ -51,6 +51,4 @@ def csv_to_parquet(data_path):
 
     df.to_parquet(data_path.parent / f'{data_path.stem}.parquet')
 
-
-
     
