@@ -1,13 +1,2 @@
-!data/
-data/*
-
-!data/noaa_lcdv2
-data/noaa_lcdv2/*
-!data/noaa_lcdv2/*_CLEANED.*
-
-!data/schedule
-data/schedule/*
-!data/schedule/lax_to_jfk*
-
 __pycache__/
 .DS_Store
