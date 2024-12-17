@@ -7,4 +7,3 @@ data/noaa_lcdv2/*
 
 !data/schedule
 data/schedule/*
-!data/schedule/lax_to_jfk*
