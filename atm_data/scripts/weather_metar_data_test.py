@@ -9,4 +9,10 @@ metar_data_dir = Path(__file__).resolve().parent.parent / 'data/iem_metar'
 
 lga_full_path = metar_data_dir / 'lga_all_1987-2023.parquet'
 
-s = '-RA:02 BR:1 |RA BR |RA'
+# s = '-RA:02 BR:1 |RA BR |RA'
+s = '||00'
+
+r = r'[\|| |:|0-9|+|-]+'
+# r = r'[\|| ]+'
+tokens = frozenset(filter(None,re.split(r, s)))
+print(tokens)

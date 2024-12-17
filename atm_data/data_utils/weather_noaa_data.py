@@ -12,6 +12,7 @@ import airportsdata as apd
 from atm_data.data_utils.tz_utils import get_tz
 
 import re
+from sklearn.preprocessing import MultiLabelBinarizer
 
 apd_iata = apd.load('IATA')
 apd_icao = apd.load('ICAO')
@@ -217,6 +218,7 @@ def tryconvert(value, dt=None):
         return np.float64(value)
     except:
         return np.nan
+    
 
 def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
 
@@ -243,12 +245,12 @@ def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
         'HourlyPrecipitation',
 
         # TODO: these need adding
-        # 'HourlyPresentWeatherType',
+        'HourlyPresentWeatherType',
         # 'HourlySkyConditions',
     ]
     
     # Read data and set datetime index
-    df = pd.read_csv(data_path, usecols=cols, parse_dates=['DATE']
+    df = pd.read_csv(data_path, usecols=cols, parse_dates=['DATE'],
                      ).rename(columns={'DATE':'Date'})
     df = df.set_index(pd.DatetimeIndex(df['Date'])).drop(['Date'], axis=1)
 
@@ -264,6 +266,25 @@ def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
     # Replace trace amounts of precipitation with 0
     df['HourlyPrecipitation'].replace(to_replace='T', value='0.00', inplace=True) 
 
+    # separately handle weather conditions
+    hpwt = df['HourlyPresentWeatherType'].astype('string').fillna('')
+    hpwt = hpwt.str.split(r'[\|| |:|0-9|a-z|+|-]+')
+    hpwt = hpwt.apply(lambda x: frozenset(filter(None,x)))
+    mlb = MultiLabelBinarizer()
+    hpwt = pd.DataFrame(
+                mlb.fit_transform(hpwt.values),
+                index=hpwt.index,
+                columns=mlb.classes_
+            ).drop(['*'], axis=1
+            ).add_prefix('HPWT_')
+    hpwt = hpwt.resample('1h').apply(max)
+    hpwt = hpwt.astype('boolean')
+    # hpwt = hpwt.astype(pd.SparseDtype(bool))
+    print(hpwt)
+    print(hpwt.dtypes)
+    
+    df.drop(['HourlyPresentWeatherType'], axis=1, inplace=True)
+
     # Convert to float
     # df = df.apply(tryconvert)
     for i, _ in enumerate(df.columns):
@@ -272,12 +293,13 @@ def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
     # separately resample wind gust speed
     hwgs = df['HourlyWindGustSpeed'].fillna(0)
     hwgs = hwgs.resample('1h').apply(max)
-    print(hwgs)
+    df.drop(['HourlyWindGustSpeed'], axis=1, inplace=True)
 
     # downsample to hourly rows and interpolate
     df = df.resample('1h').last()
     df = df.interpolate(method='time', axis=0).ffill().bfill()
     df['HourlyWindGustSpeed'] = hwgs
+    df = df.join(hpwt)
 
     df = df.convert_dtypes()
     print(df.dtypes)
