@@ -10,10 +10,13 @@ from data_utils.schedule_data import *
 ssd_base_dir = Path('/Volumes/SN850X/').resolve()
 airline_path = ssd_base_dir / 'airline.csv'
 schedule_data_dir = Path('data/schedule').resolve()
+lga_full_path = schedule_data_dir / 'lga_all_1987-2020.parquet'
 
-# extract_airport_from_ibm(airline_path, 'LGA', schedule_data_dir)
 
-clean_airport_extracted(schedule_data_dir / 'lga_all_1987-2020.parquet', 'LGA', start_year=2019, end_year=2019)
+extract_airport_from_ibm_filter(airline_path, 'LGA', schedule_data_dir)
+# extract_airport_from_ibm_handle_issues(lga_full_path, 2000, 2019)
+
+# clean_airport_extracted(schedule_data_dir / 'lga_all_1987-2020.parquet', 'LGA', start_year=2019, end_year=2019)
 
 # df = pd.read_parquet(schedule_data_dir / 'lga_all_1987-2020.parquet')
 # df = df.loc[df['Year'].between(2003,2019, inclusive='both')]

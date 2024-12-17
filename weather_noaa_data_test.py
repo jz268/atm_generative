@@ -1,19 +1,13 @@
 from data_utils.weather_noaa_data import *
 from pathlib import Path
 
-
-# data_dir = Path('data/noaa_ghcnh').resolve()
-
-# dl_noaa_ghcnh(data_dir, "USW00023234", "SFO")
-# dl_noaa_ghcnh(data_dir, "USW00014739", "BOS")
-
-# data_dir = Path('data/noaa_lcdv2').resolve()
-
-# dl_noaa_lcdv2(data_dir, "USW00023234", "SFO")
-# dl_noaa_lcdv2(data_dir, "USW00014739", "BOS")
+data_dir = Path('data/noaa_lcdv2').resolve()
 
 # dl_noaa_lcdv2_airport(data_dir, 'LAX')
 # dl_noaa_lcdv2_airport(data_dir, 'JFK')
 
-clean_noaa_lcdv2_file('data/noaa_lcdv2/LCD_LAX_1987-2023.csv', verbose=True)
-clean_noaa_lcdv2_file('data/noaa_lcdv2/LCD_JFK_1987-2023.csv', verbose=True)
+# clean_noaa_lcdv2_file('data/noaa_lcdv2/LCD_LAX_1987-2023.csv', verbose=True)
+# clean_noaa_lcdv2_file('data/noaa_lcdv2/LCD_JFK_1987-2023.csv', verbose=True)
+
+# dl_noaa_lcdv2_airport(data_dir, 'LGA')
+clean_noaa_lcdv2_file('data/noaa_lcdv2/LCD_LGA_1987-2023.csv', verbose=True)

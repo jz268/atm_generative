@@ -135,26 +135,83 @@ def ddf_from_ibm(airline_path):
     return ddf
 
 
-def extract_airport_from_ibm(airline_path, airport_iata, out_dir=None, start_year=1987, end_year=2020):
+def ddf_from_ibm_reduced(airline_path):
+
+    dtype = {
+        'Year': 'Int16', 
+        'Month': 'Int8', 
+        'DayofMonth': 'Int8', 
+        'FlightDate': 'str',
+
+        'Reporting_Airline': 'str', # 'category',
+        'Tail_Number': 'str', 
+        'Flight_Number_Reporting_Airline': 'str',
+
+        'Origin': 'str', 
+        'Dest': 'str',
+
+        'CRSDepTime': 'Int16', 
+        'DepTime': 'Int16', 
+
+        'WheelsOff': 'str', # 'Int16', bad value, e.g. '0-71'
+        'WheelsOn': 'str', # 'Int16', bad value, e.g. '0-55'
+
+        'CRSArrTime': 'Int16', 
+        'ArrTime': 'Int16', 
+
+        'Cancelled': 'Int8', # 'boolean', 
+        'Diverted': 'Int8', # 'boolean', 
+        'DivReachedDest': 'Int8', # 'boolean', 
+    }
+
+    ddf = dd.read_csv(airline_path, header=0, encoding='latin-1', engine="pyarrow", 
+                       dtype=dtype, usecols=list(dtype.keys()))
+    
+    for col in ('Cancelled', 'Diverted', 'DivReachedDest'):
+        ddf[col] = ddf[col].astype('boolean')
+
+    return ddf
+
+
+def extract_airport_from_ibm_filter(airline_path, airport_iata, out_dir=None, reduced=True):
+
+    start_year = 1987
+    end_year = 2020
 
     if out_dir is None:
         out_dir = Path(__file__).parent / 'data'
     else:
         out_dir = Path(out_dir).resolve()
     
-    ddf = ddf_from_ibm(airline_path)
+    if reduced:
+        ddf = ddf_from_ibm_reduced(airline_path)
+        tag = 'all'
+    else:
+        ddf = ddf_from_ibm(airline_path)
+        tag = 'full'
 
-    ddf_all = ddf[ddf['Year'].between(start_year, end_year, inclusive='both') &
-                ((ddf['Origin'] == airport_iata) | (ddf['Dest'] == airport_iata))]
-    
-    # ddf_arr = ddf[ddf['Dest'] == airport_iata]
-    # ddf_dep = ddf[ddf['Origin'] == airport_iata]
+    ddf = ddf[(ddf['Origin'] == airport_iata) | (ddf['Dest'] == airport_iata)]
 
-    # for ddf, tag in ((ddf_all, 'all'), (ddf_arr, 'arr'), (ddf_dep, 'dep')):
-    for ddf, tag in ((ddf_all, 'all'),):
-        print(f'processing for {tag}...')
-        df = ddf.compute()
-        df.to_parquet(out_dir / f'{airport_iata.lower()}_{tag}_{start_year}-{end_year}.parquet')
+    print(f'processing for {tag}...')
+    df = ddf.compute()
+    df.to_parquet(out_dir / f'{airport_iata.lower()}_{tag}_{start_year}-{end_year}_raw.parquet')
+
+
+def extract_airport_from_ibm_handle_issues(data_path, start_year=2000, end_year=2019):
+    data_path = Path(data_path).resolve()
+    df = pd.read_parquet(data_path)
+
+    # filter to year range    
+    df = df[df['Year'].between(start_year, end_year, inclusive='both')]
+
+    df = df.loc[~(df['WheelsOff'].str.contains('n')) & ~(df['WheelsOn'].str.contains('n'))]
+
+    for wheel in ('WheelsOff', 'WheelsOn'):
+        df[wheel] = df[wheel].astype('float').astype('Int16')
+
+    out_path_stem = data_path.stem[:-4]
+    df.to_parquet(data_path.parent / f'{out_path_stem}.parquet')
+
 
 
 

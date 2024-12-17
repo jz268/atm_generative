@@ -3,7 +3,7 @@ data/*
 
 !data/noaa_lcdv2
 data/noaa_lcdv2/*
-!data/noaa_lcdv2/*_CLEANED.csv
+!data/noaa_lcdv2/*_CLEANED.*
 
 !data/schedule
 data/schedule/*

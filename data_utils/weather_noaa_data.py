@@ -11,14 +11,17 @@ import airportsdata as apd
 # import timezonefinder, pytz
 from data_utils.tz_utils import get_tz
 
+import re
+
 apd_iata = apd.load('IATA')
 apd_icao = apd.load('ICAO')
 
+cwd_path = Path(__file__).parent
 
 def generate_station_list_csvs():
     for stem in ("ghcnh-station-list", "lcdv2-station-list"):
-        input_path = f'data_utils/noaa_lut/{stem}.txt'
-        output_path = f'data_utils/noaa_lut/{stem}.csv'
+        input_path = cwd_path / 'data_utils/noaa_lut/{stem}.txt'
+        output_path = cwd_path / 'data_utils/noaa_lut/{stem}.csv'
         with open(input_path, 'r') as f_in:
             lines = [line[:80].strip().split(maxsplit=4) + [line[80:].strip()]
                     for line in f_in]
@@ -27,8 +30,8 @@ def generate_station_list_csvs():
                 writer.writerow(('station_id', 'latitude', 'longitude', 'elevation', 'station_name', 'meteostat_id'))
                 writer.writerows(lines)
 
-ghcnh_stations = pd.read_csv(Path(Path(__file__).parent, 'noaa_lut/ghcnh-station-list.csv'))
-lcdv2_stations = pd.read_csv(Path(Path(__file__).parent, 'noaa_lut/lcdv2-station-list.csv'))
+ghcnh_stations = pd.read_csv(cwd_path / 'noaa_lut/ghcnh-station-list.csv')
+lcdv2_stations = pd.read_csv(cwd_path / 'noaa_lut/lcdv2-station-list.csv')
 
 def iata_to_icao(code):
     if code in apd_iata:
@@ -215,11 +218,11 @@ def tryconvert(value, dt=None):
     except:
         return np.nan
 
-def clean_noaa_lcdv2_file(data_path, verbose=False):
+def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
 
     data_path = Path(data_path).resolve()
 
-    import_columns = [  
+    cols = [  
         'DATE',
         'LATITUDE',
         'LONGITUDE',
@@ -227,25 +230,78 @@ def clean_noaa_lcdv2_file(data_path, verbose=False):
         'HourlyVisibility',
 
         'HourlyDryBulbTemperature',
-        'HourlyWetBulbTemperature',
         'HourlyDewPointTemperature',
 
         'HourlyRelativeHumidity',
 
         'HourlyWindSpeed',
         'HourlyWindDirection',
+        'HourlyWindGustSpeed',
 
-        'HourlyStationPressure',
-        'HourlySeaLevelPressure',
-        'HourlyPressureTendency',
         'HourlyAltimeterSetting',
 
         'HourlyPrecipitation',
 
-        # added (TODO? not sure if relevant)
+        # TODO: these need adding
         # 'HourlyPresentWeatherType',
         # 'HourlySkyConditions',
     ]
+    
+    # Read data and set datetime index
+    df = pd.read_csv(data_path, parse_dates=['DATE'], usecols=cols)
+    df = df.set_index(pd.DatetimeIndex(df['DATE']))
+    df.drop(['DATE'], axis=1, inplace=True)
+
+    # uhh i guess ignore ambiguous for now
+    if out_time_zone is not None:
+        time_zone = get_tz(df['LATITUDE'].iloc[0], df['LONGITUDE'].iloc[0])
+        df = df.tz_localize(time_zone, ambiguous='NaT').tz_convert(out_time_zone)
+    df.drop(['LATITUDE', 'LONGITUDE'], axis=1, inplace=True)
+    
+    # Replace '*' values with np.nan
+    df.replace(to_replace='*', value=np.nan, inplace=True)
+
+    # Replace trace amounts of precipitation with 0
+    df['HourlyPrecipitation'].replace(to_replace='T', value='0.00', inplace=True) 
+
+    # Convert to float
+    for i, _ in enumerate(df.columns):
+        df.iloc[:,i] =  df.iloc[:,i].apply(tryconvert)
+
+    # separately resample wind gust speed
+    hwgs = df['HourlyWindGustSpeed'].fillna(0)
+    hwgs = hwgs.resample('1h').apply(max)
+    print(hwgs)
+
+    # downsample to hourly rows and interpolate
+    df = df.resample('1h').last()
+    df = df.interpolate(method='time', axis=0).ffill().bfill()
+    df['HourlyWindGustSpeed'] = hwgs
+
+    df = df.convert_dtypes()
+    print(df.dtypes)
+
+    # Output csv based on input filename
+    data_dir, data_name = data_path.parent, data_path.stem
+    df.to_csv(data_dir / Path(data_name + '_CLEANED.csv'), float_format='%g')
+    df.to_parquet(data_dir / Path(data_name + '_CLEANED.parquet'))
+
+    if verbose:
+        print("Data successfully cleaned, below are some stats:")
+        print('# of megabytes held by dataframe: ' + str(round(sys.getsizeof(df) / 1000000,2)))
+        print('# of features: ' + str(df.shape[1])) 
+        print('# of observations: ' + str(df.shape[0]))
+        print('Start date: ' + str(df.index[0]))
+        print('End date: ' + str(df.index[-1]))
+        print('# of days: ' + str((df.index[-1] - df.index[0]).days))
+        print('# of months: ' + str(round((df.index[-1] - df.index[0]).days/30,2)))
+        print('# of years: ' + str(round((df.index[-1] - df.index[0]).days/365,2)))
+
+
+
+
+
+
 
 # • Snow Depth [cm]
 # • Snow Accumulation [cm]
@@ -274,72 +330,6 @@ def clean_noaa_lcdv2_file(data_path, verbose=False):
 # elements of combined weather elements, 3:Combined
 # with previous weather element to form a single weather
 # report
-    
-    # Read data and set datetime index
-    data_weather = pd.read_csv(data_path, parse_dates=['DATE'], usecols=import_columns)
-    data_weather = data_weather.set_index(pd.DatetimeIndex(data_weather['DATE']))
-    data_weather.drop(['DATE'], axis=1, inplace=True)
-
-    time_zone = get_tz(data_weather['LATITUDE'].iloc[0], data_weather['LONGITUDE'].iloc[0])
-    data_weather.drop(['LATITUDE', 'LONGITUDE'], axis=1, inplace=True)
-
-    # uhh i guess ignore ambiguous for now
-    data_weather = data_weather.tz_localize(time_zone, ambiguous='NaT').tz_convert("UTC")
-    
-    # Replace '*' values with np.nan
-    data_weather.replace(to_replace='*', value=np.nan, inplace=True)
-
-    # Replace trace amounts of precipitation with 0
-    data_weather['HourlyPrecipitation'].replace(to_replace='T', value='0.00', inplace=True) 
-    # Replace rows with tow '.' with np.nan
-    data_weather.loc[data_weather['HourlyPrecipitation'].str.count('\.') > 1, 'HourlyPrecipitation'] = np.nan 
-
-    # Convert to float
-    for i, _ in enumerate(data_weather.columns):
-        data_weather.iloc[:,i] =  data_weather.iloc[:,i].apply(tryconvert)
-
-    # Replace any hourly visibility figure outside these 0-10 bounds
-    data_weather.loc[(data_weather['HourlyVisibility'] > 10) | (data_weather['HourlyVisibility'] < 0), 'HourlyVisibility'] = np.nan
-
-    # Downsample to hourly rows 
-    data_weather = data_weather.resample('60min').last().shift(periods=1) 
-
-    # Interpolate missing values
-    data_weather['HourlyPressureTendency'] = data_weather['HourlyPressureTendency'].fillna(method='ffill') #fill with last valid observation
-    data_weather = data_weather.interpolate(method='linear')
-    data_weather.drop(data_weather.index[0], inplace=True) #drop first row
-
-    # Transform HourlyWindDirection into a cyclical variable using sin and cos transforms
-    data_weather['HourlyWindDirectionSin'] = np.sin(data_weather['HourlyWindDirection'].astype('float')*(2.*np.pi/360))
-    data_weather['HourlyWindDirectionCos'] = np.cos(data_weather['HourlyWindDirection'].astype('float')*(2.*np.pi/360))
-    # data_weather.drop(['HourlyWindDirection'], axis=1, inplace=True)
-
-    # Transform HourlyPressureTendency into 3 dummy variables based on NOAA documentation
-    data_weather['HourlyPressureTendencyIncr'] = [1.0 if x in [0,1,2,3] else 0.0 for x in data_weather['HourlyPressureTendency']] # 0 through 3 indicates an increase in pressure over previous 3 hours
-    data_weather['HourlyPressureTendencyDecr'] = [1.0 if x in [5,6,7,8] else 0.0 for x in data_weather['HourlyPressureTendency']] # 5 through 8 indicates a decrease over the previous 3 hours
-    data_weather['HourlyPressureTendencyCons'] = [1.0 if x == 4 else 0.0 for x in data_weather['HourlyPressureTendency']] # 4 indicates no change during the previous 3 hours
-    # data_weather.drop(['HourlyPressureTendency'], axis=1, inplace=True)
-    data_weather['HourlyPressureTendencyIncr'] = data_weather['HourlyPressureTendencyIncr'].astype(('float32'))
-    data_weather['HourlyPressureTendencyDecr'] = data_weather['HourlyPressureTendencyDecr'].astype(('float32'))
-    data_weather['HourlyPressureTendencyCons'] = data_weather['HourlyPressureTendencyCons'].astype(('float32'))
-
-    # Output csv based on input filename
-    data_dir, data_name = data_path.parent, data_path.stem
-    data_weather.to_csv(data_dir / Path(data_name + '_CLEANED.csv'), float_format='%g')
-
-    if verbose:
-        print("Data successfully cleaned, below are some stats:")
-        print('# of megabytes held by dataframe: ' + str(round(sys.getsizeof(data_weather) / 1000000,2)))
-        print('# of features: ' + str(data_weather.shape[1])) 
-        print('# of observations: ' + str(data_weather.shape[0]))
-        print('Start date: ' + str(data_weather.index[0]))
-        print('End date: ' + str(data_weather.index[-1]))
-        print('# of days: ' + str((data_weather.index[-1] - data_weather.index[0]).days))
-        print('# of months: ' + str(round((data_weather.index[-1] - data_weather.index[0]).days/30,2)))
-        print('# of years: ' + str(round((data_weather.index[-1] - data_weather.index[0]).days/365,2)))
-
-
-
 
 
 
