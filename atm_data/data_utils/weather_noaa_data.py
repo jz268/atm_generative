@@ -265,7 +265,9 @@ def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
     df['HourlyPrecipitation'].replace(to_replace='T', value='0.00', inplace=True) 
 
     # Convert to float
-    df = df.apply(tryconvert)
+    # df = df.apply(tryconvert)
+    for i, _ in enumerate(df.columns):
+        df.iloc[:,i] = df.iloc[:,i].apply(tryconvert)
 
     # separately resample wind gust speed
     hwgs = df['HourlyWindGustSpeed'].fillna(0)

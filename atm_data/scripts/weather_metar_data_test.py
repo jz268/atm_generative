@@ -1,5 +1,6 @@
 from atm_data.data_utils.weather_metar_data import *
 from pathlib import Path
+import re
 
 metar_data_dir = Path(__file__).resolve().parent.parent / 'data/iem_metar'
 
