@@ -10,6 +10,7 @@ import airportsdata as apd
 from atm_data.data_utils.tz_utils import get_tz_airport_iata
 
 from tqdm.dask import TqdmCallback
+from tqdm import tqdm
 
 cb = TqdmCallback(desc="global")
 cb.register()
@@ -137,46 +138,40 @@ def ddf_from_ibm(airline_path):
 
 def ddf_from_ibm_reduced(airline_path):
 
-    dtype = {
-        'Year': 'Int16', 
-        'Month': 'Int8', 
-        'DayofMonth': 'Int8', 
-        'FlightDate': 'str',
+    dtype = { 
+        'FlightDate': 'string',
 
-        'Reporting_Airline': 'str', # 'category',
-        'Tail_Number': 'str', 
-        'Flight_Number_Reporting_Airline': 'str',
+        'Origin': 'string', 
+        'Dest': 'string',
 
-        'Origin': 'str', 
-        'Dest': 'str',
+        'Reporting_Airline': 'string', # 'category',
+        'Tail_Number': 'string', 
+        'Flight_Number_Reporting_Airline': 'string',
 
-        'CRSDepTime': 'Int16', 
-        'DepTime': 'Int16', 
+        'CRSDepTime': 'Int16', # 'string', 
+        'DepTime': 'Int16', # 'string', 
 
-        'WheelsOff': 'str', # 'Int16', bad value, e.g. '0-71'
-        'WheelsOn': 'str', # 'Int16', bad value, e.g. '0-55'
+        'CRSArrTime': 'Int16', # 'string', 
+        'ArrTime': 'Int16', # 'string', 
 
-        'CRSArrTime': 'Int16', 
-        'ArrTime': 'Int16', 
+        'WheelsOff': 'string', # 'Int16', bad value, e.g. '0-71'
+        'WheelsOn': 'string', # 'Int16', bad value, e.g. '0-55'
 
         'Cancelled': 'Int8', # 'boolean', 
-        'Diverted': 'Int8', # 'boolean', 
-        'DivReachedDest': 'Int8', # 'boolean', 
     }
 
     ddf = dd.read_csv(airline_path, header=0, encoding='latin-1', engine="pyarrow", 
                        dtype=dtype, usecols=list(dtype.keys()))
     
-    for col in ('Cancelled', 'Diverted', 'DivReachedDest'):
-        ddf[col] = ddf[col].astype('boolean')
+    ddf['Cancelled'] = ddf['Cancelled'].astype('boolean')
 
     return ddf
 
 
 def extract_airport_from_ibm_filter(airline_path, airport_iata, out_dir=None, reduced=True):
 
-    start_year = 1987
-    end_year = 2020
+    # start_year = 1987
+    # end_year = 2020
 
     if out_dir is None:
         out_dir = Path(__file__).parent / 'data'
@@ -185,7 +180,7 @@ def extract_airport_from_ibm_filter(airline_path, airport_iata, out_dir=None, re
     
     if reduced:
         ddf = ddf_from_ibm_reduced(airline_path)
-        tag = 'all'
+        tag = 'reduced'
     else:
         ddf = ddf_from_ibm(airline_path)
         tag = 'full'
@@ -194,27 +189,107 @@ def extract_airport_from_ibm_filter(airline_path, airport_iata, out_dir=None, re
 
     print(f'processing for {tag}...')
     df = ddf.compute()
-    df.to_parquet(out_dir / f'{airport_iata.lower()}_{tag}_{start_year}-{end_year}_raw.parquet')
+
+    out_stem = f'{airport_iata.lower()}_{tag}_raw'
+    df.to_parquet(out_dir / f'{out_stem}.parquet')
+    df.to_csv(out_dir / f'{out_stem}.csv', index=False)
 
 
-def extract_airport_from_ibm_handle_issues(data_path, start_year=2000, end_year=2019):
+# TODO: fix this
+def extract_airport_from_ibm_handle_issues(data_path, start_year=1995, end_year=2019):
     data_path = Path(data_path).resolve()
     df = pd.read_parquet(data_path)
 
     # filter to year range    
-    df = df[df['Year'].between(start_year, end_year, inclusive='both')]
+    df['FlightDate'] = pd.to_datetime(df['FlightDate'])
+    df = df.loc[df['FlightDate'].dt.year.between(start_year, end_year, inclusive='both')]
 
-    df = df.loc[~(df['WheelsOff'].str.contains('n')) & ~(df['WheelsOn'].str.contains('n'))]
+    # # do somethign about the wheelson wheelsoff issues?
+    # df = df.loc[~(df['WheelsOff'].str.contains('n')) & ~(df['WheelsOn'].str.contains('n'))]
 
     for wheel in ('WheelsOff', 'WheelsOn'):
         df[wheel] = df[wheel].astype('float').astype('Int16')
 
-    out_path_stem = data_path.stem[:-4]
+    actual_cols = ['DepTime', 'ArrTime', 'WheelsOff', 'WheelsOn']
+    df.loc[df['Cancelled'], actual_cols] = 9999
+
+    df['Reporting_Airline'] = df['Reporting_Airline'].astype('category')
+
+    df = df.sort_values(by=['FlightDate', 'CRSDepTime'])
+
+    print("missing data, before dropna:")
+    print(df.isna().sum() / len(df))
+    print(df.dtypes)
+
+    ba_cols = [
+        'FlightDate', 'Origin', 'Dest', 'Flight_Number_Reporting_Airline', 
+        'CRSDepTime', 'DepTime', 'CRSArrTime', 'ArrTime', 
+        'WheelsOff', 'WheelsOn', 'Cancelled'
+    ]
+    # i think the ~0.24% missing ArrTime is maybe diversions that don't make it?
+    df.dropna(subset=ba_cols, inplace=True)
+
+    print("missing data, after dropna:")
+    print(df.isna().sum() / len(df))
+    print(df.dtypes)
+
+    out_path_stem = f'{data_path.stem[:-4]}_{start_year}-{end_year}_clean'
     df.to_parquet(data_path.parent / f'{out_path_stem}.parquet')
+    df.to_csv(data_path.parent / f'{out_path_stem}.csv', index=False)
+
+
+
+def split_by_year(data_path, start_year=1995, end_year=2019):
+    pass
+
+
+def split_by_month(data_path, out_dir=None): 
+
+    data_path = Path(data_path).resolve()
+    
+    out_dir = data_path.parent / data_path.stem if out_dir is None else out_dir
+    out_dir = Path(out_dir).resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    years = data_path.stem.split('_')[2].split('-')
+    start_year = int(years[0])
+    end_year = int(years[1])
+
+    out_head = "_".join(data_path.stem.split('_')[:2])
+    out_tail = data_path.stem.split('_')[-1]
+
+    out_dir_parquet = out_dir / 'parquet'
+    out_dir_csv = out_dir / 'csv'
+
+    df = pd.read_parquet(data_path)
+    df_date = df['FlightDate'].dt
+
+    for year in tqdm(range(start_year, end_year+1)):
+        current_out_dir_csv = out_dir_csv / str(year)
+        current_out_dir_parquet = out_dir_parquet / str(year)
+        current_out_dir_csv.mkdir(parents=True, exist_ok=True)
+        current_out_dir_parquet.mkdir(parents=True, exist_ok=True)
+
+        for month in tqdm(range(1, 13), leave=False):
+            current_df = df.loc[
+                (df_date.year == year) & (df_date.month == month)]
+            current_out_stem = f'{out_head}_{year}_{month:02d}_{out_tail}'
+            current_df.to_parquet(current_out_dir_parquet / f'{current_out_stem}.parquet')
+            current_df.to_csv(current_out_dir_csv / f'{current_out_stem}.csv', index=False)
+
+
+            
+
+            
 
 
 
 
+
+
+
+
+# ignore this, let's just adapt to use bayes air dataloader for
 def clean_airport_extracted(data_path, airport_iata, start_year=2000, end_year=2019):
 
     data_path = Path(data_path).resolve()

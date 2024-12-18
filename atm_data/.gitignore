@@ -7,6 +7,7 @@ data/noaa_lcdv2/*
 
 !data/schedule
 data/schedule/*
+!data/schedule/lga_reduced_1995-2019_clean
 
 !data/aspm
 data/aspm/*
