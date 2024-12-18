@@ -18,8 +18,8 @@ lga_clean_path = schedule_data_dir / f'lga_reduced_{start_year}-{end_year}_clean
 
 
 # extract_airport_from_ibm_filter(airline_path, 'LGA', schedule_data_dir)
-# extract_airport_from_ibm_handle_issues(lga_reduced_path, start_year, end_year)
-split_by_month(lga_clean_path)
+extract_airport_from_ibm_handle_issues(lga_reduced_path, start_year, end_year)
+# split_by_month(lga_clean_path)
 
 # clean_airport_extracted(schedule_data_dir / 'lga_all_1987-2020.parquet', 'LGA', start_year=2019, end_year=2019)
 

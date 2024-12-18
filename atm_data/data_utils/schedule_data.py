@@ -2,6 +2,7 @@ import pandas as pd
 import sys
 from pathlib import Path
 import dask.dataframe as dd
+import numpy as np
 
 import airportsdata as apd
 # import polars as pl
@@ -217,9 +218,11 @@ def extract_airport_from_ibm_handle_issues(data_path, start_year=1995, end_year=
 
     df = df.sort_values(by=['FlightDate', 'CRSDepTime'])
 
-    print("missing data, before dropna:")
-    print(df.isna().sum() / len(df))
-    print(df.dtypes)
+    string_cols = ['Origin', 'Dest', 'Tail_Number', 'Flight_Number_Reporting_Airline']
+    df[string_cols].replace('', np.nan, inplace=True)
+
+    print("missing data, before drop:")
+    print(pd.concat([df.isna().sum(), df.isna().sum() / len(df)], axis=1))
 
     ba_cols = [
         'FlightDate', 'Origin', 'Dest', 'Flight_Number_Reporting_Airline', 
@@ -229,8 +232,9 @@ def extract_airport_from_ibm_handle_issues(data_path, start_year=1995, end_year=
     # i think the ~0.24% missing ArrTime is maybe diversions that don't make it?
     df.dropna(subset=ba_cols, inplace=True)
 
-    print("missing data, after dropna:")
-    print(df.isna().sum() / len(df))
+    print("missing data, after drop:")
+    print(pd.concat([df.isna().sum(), df.isna().sum() / len(df)], axis=1))
+
     print(df.dtypes)
 
     out_path_stem = f'{data_path.stem[:-4]}_{start_year}-{end_year}_clean'
