@@ -6,6 +6,8 @@ import numpy as np
 
 import airportsdata as apd
 # import polars as pl
+from calendar import monthrange
+import functools
 
 # import timezonefinder as tzf
 from atm_data.data_utils.tz_utils import get_tz_airport_iata
@@ -219,7 +221,7 @@ def extract_airport_from_ibm_handle_issues(data_path, start_year=1995, end_year=
     df = df.sort_values(by=['FlightDate', 'CRSDepTime'])
 
     string_cols = ['Origin', 'Dest', 'Tail_Number', 'Flight_Number_Reporting_Airline']
-    df[string_cols].replace('', np.nan, inplace=True)
+    df.replace({col:{'':np.nan} for col in string_cols}, inplace=True)
 
     print("missing data, before drop:")
     print(pd.concat([df.isna().sum(), df.isna().sum() / len(df)], axis=1))
@@ -235,6 +237,8 @@ def extract_airport_from_ibm_handle_issues(data_path, start_year=1995, end_year=
     print("missing data, after drop:")
     print(pd.concat([df.isna().sum(), df.isna().sum() / len(df)], axis=1))
 
+    df.reset_index(drop=True, inplace=True)
+
     print(df.dtypes)
 
     out_path_stem = f'{data_path.stem[:-4]}_{start_year}-{end_year}_clean'
@@ -244,46 +248,60 @@ def extract_airport_from_ibm_handle_issues(data_path, start_year=1995, end_year=
 
 
 def repair_targeted(path, date, flight_number, col, old_value, new_value):
-    # for now you have to fix csv manually
+    """
+        # repair log (temporary):
+        original: 2004-08-21,BNA,LGA,OH,N458CA,5413,1405,160,1720,1955,1637,1946,False
+        fix: 160 -> 1600
+    """
+
     df = pd.read_parquet(path)
     target = ((df['FlightDate'] == pd.to_datetime(date)) & 
         (df['Flight_Number_Reporting_Airline'] == flight_number))
     idx_list = df.index[target].tolist()
-    assert(len(idx_list) == 1, "flight number should be unique in a day")
+    assert len(idx_list) == 1, "flight number should be unique in a day"
     idx = idx_list[0]
     
     # safety check
     if old_value == new_value:
         print(f"warning: old_value ({old_value}) same as new_value ({new_value})")
-    if df.at[idx, col] != old_value:
-        print()
+
+    if df.at[idx, col] == new_value:
+        print(f"warning: existing value ({df.at[idx, col]}) same as new_value ({new_value})")
+
+    elif df.at[idx, col] != old_value:
         raise ValueError(
             f"\n   old_value ({old_value}) and existing value ({df.at[idx, col]}) don't match...\n" +
             "   are you sure you're changing the right value?")
+    
     # setting value
     df.at[idx, col] = new_value
 
     print(f'replacing {old_value} with {new_value} in {date} flight {flight_number} :)')
 
     df.to_parquet(path)
-
-# repair log (temporary):
-"""
-    original: 2004-08-21,BNA,LGA,OH,N458CA,5413,1405,160,1720,1955,1637,1946,False
-    fix: 160 -> 1600
-"""
+    df.to_csv(path.with_suffix('.csv'), index=False)
 
 
 
-def split_by_year(data_path, start_year=1995, end_year=2019):
-    pass
 
 
-def split_by_month(data_path, out_dir=None): 
+def split_initial_work(data_path, out_dir, time_res):
+
+    if time_res == "yearly":
+        split_monthly = False
+        split_daily = False
+    elif time_res == "monthly":
+        split_monthly = True
+        split_daily = False
+    elif time_res == "daily":
+        split_monthly = True
+        split_daily = True
+    else:
+        raise ValueError("time_res must be one of daily, monthly, yearly")
 
     data_path = Path(data_path).resolve()
     
-    out_dir = data_path.parent / data_path.stem if out_dir is None else out_dir
+    out_dir = data_path.parent / f'{data_path.stem}_{time_res}' if out_dir is None else out_dir
     out_dir = Path(out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -297,24 +315,214 @@ def split_by_month(data_path, out_dir=None):
     out_dir_parquet = out_dir / 'parquet'
     out_dir_csv = out_dir / 'csv'
 
+    out_dir_csv.mkdir(parents=True, exist_ok=True)
+    out_dir_parquet.mkdir(parents=True, exist_ok=True)
+
     df = pd.read_parquet(data_path)
     df_date = df['FlightDate'].dt
 
-    for year in tqdm(range(start_year, end_year+1)):
-        current_out_dir_csv = out_dir_csv / str(year)
-        current_out_dir_parquet = out_dir_parquet / str(year)
-        current_out_dir_csv.mkdir(parents=True, exist_ok=True)
-        current_out_dir_parquet.mkdir(parents=True, exist_ok=True)
+    year_mask = {
+        year: (df_date.year == year)
+        for year in range(start_year, end_year+1)
+    }
+    month_mask = {
+        month: (df_date.month == month)
+        for month in range(1, 13)
+    }
+    day_mask = {
+        day: (df_date.day == day)
+        for day in range(1, 32)
+    }
 
-        for month in tqdm(range(1, 13), leave=False):
-            current_df = df.loc[
-                (df_date.year == year) & (df_date.month == month)]
-            current_out_stem = f'{out_head}_{year}_{month:02d}_{out_tail}'
-            current_df.to_parquet(current_out_dir_parquet / f'{current_out_stem}.parquet')
-            current_df.to_csv(current_out_dir_csv / f'{current_out_stem}.csv', index=False)
+    return (
+        data_path, out_dir, 
+        start_year, end_year, 
+        out_head, out_tail, 
+        out_dir_parquet, out_dir_csv, 
+        df, year_mask, month_mask, day_mask,
+        split_monthly, split_daily
+    )
 
 
+# def split_by_year(data_path, out_dir=None):
+
+#     (
+#         data_path, out_dir, 
+#         start_year, end_year, 
+#         out_head, out_tail, 
+#         out_dir_parquet, out_dir_csv, 
+#         df, df_date 
+#     ) = \
+#         split_initial_work(data_path, out_dir, 'yearly')
+    
+#     for year in (pbar_year := tqdm(range(start_year, end_year+1))):
+#         pbar_year.set_description(f" year")
+
+#         current_out_dir_csv = out_dir_csv
+#         current_out_dir_parquet = out_dir_parquet
+#         current_out_dir_csv.mkdir(parents=True, exist_ok=True)
+#         current_out_dir_parquet.mkdir(parents=True, exist_ok=True)
+
+#         year_df = df.loc[df_date.year == year]
+#         current_df = year_df.reset_index(drop=True)
+
+#         current_out_stem = f'{out_head}_{year}_{out_tail}'
+#         current_df.to_parquet(current_out_dir_parquet / f'{current_out_stem}.parquet')
+#         current_df.to_csv(current_out_dir_csv / f'{current_out_stem}.csv', index=False)
+    
+    
+# def split_by_month(data_path, out_dir=None): 
+
+#     (
+#         data_path, out_dir, 
+#         start_year, end_year, 
+#         out_head, out_tail, 
+#         out_dir_parquet, out_dir_csv, 
+#         df, year_mask, month_mask, day_mask
+#     ) = \
+#         split_initial_work(data_path, out_dir, 'monthly')
+
+#     for year in (pbar_year := tqdm(range(start_year, end_year+1))):
+#         pbar_year.set_description(f" year")
+
+#         current_out_dir_csv = out_dir_csv / str(year)
+#         current_out_dir_parquet = out_dir_parquet / str(year)
+#         current_out_dir_csv.mkdir(parents=True, exist_ok=True)
+#         current_out_dir_parquet.mkdir(parents=True, exist_ok=True)
+
+#         year_df = df.loc[year_mask[year]]
+
+#         for month in (pbar_month := tqdm(range(1, 13), leave=False)):
+#             pbar_month.set_description(f"month")
+
+#             month_df = year_df.loc[month_mask[month]].reset_index(drop=True)
+
+#             current_out_stem = f'{out_head}_{year}_{month:02d}_{out_tail}'
+#             month_df.to_parquet(current_out_dir_parquet / f'{current_out_stem}.parquet')
+#             month_df.to_csv(current_out_dir_csv / f'{current_out_stem}.csv', index=False)
+        
+#         del month_df
+
+#     del year_df
+
+
+# def split_by_day(data_path, out_dir=None): 
+
+#     (
+#         data_path, out_dir, 
+#         start_year, end_year, 
+#         out_head, out_tail, 
+#         out_dir_parquet, out_dir_csv, 
+#         df, year_mask, month_mask, day_mask
+#     ) = \
+#         split_initial_work(data_path, out_dir, 'daily')
+
+#     for year in (pbar_year := tqdm(range(start_year, end_year+1))):
+#         pbar_year.set_description(f" year")
+
+#         year_df = df.loc[year_mask[year]]
+  
+#         for month in (pbar_month := tqdm(range(1, 13), leave=False)):
+#             pbar_month.set_description(f"month")
+
+#             current_out_dir_csv = out_dir_csv / str(year) / f'{month:02d}'
+#             current_out_dir_parquet = out_dir_parquet / str(year) / f'{month:02d}'
+#             current_out_dir_csv.mkdir(parents=True, exist_ok=True)
+#             current_out_dir_parquet.mkdir(parents=True, exist_ok=True)
+
+#             month_df = year_df.loc[month_mask[month]]
+#             _, num_days = monthrange(year, month)
+
+#             for day in (pbar_day := tqdm(range(1, num_days+1), leave=False)):
+#                 pbar_day.set_description(f"  day")
+
+#                 day_df = month_df.loc[day_mask[day]].reset_index()
+
+#                 current_out_stem = f'{out_head}_{year}_{month:02d}_{day:02d}_{out_tail}'
+#                 day_df.to_parquet(current_out_dir_parquet / f'{current_out_stem}.parquet')
+#                 day_df.to_csv(current_out_dir_csv / f'{current_out_stem}.csv', index=False)
+
+#                 del day_df
+
+#             del month_df
+
+#         del year_df
+
+
+def split_by_time_unified(data_path, time_res, out_dir=None): 
+
+    (
+        data_path, out_dir, 
+        start_year, end_year, 
+        out_head, out_tail, 
+        out_dir_parquet, out_dir_csv, 
+        df, year_mask, month_mask, day_mask,
+        split_monthly, split_daily
+    ) = \
+        split_initial_work(data_path, out_dir, time_res)
+
+    for year in (pbar_year := tqdm(range(start_year, end_year+1))):
+        pbar_year.set_description(f" year")
+
+        year_df = df.loc[year_mask[year]]
+
+        # split yearly only, don't need to proceed further
+        if not split_monthly:
+            year_out_stem = f'{out_head}_{year}_{out_tail}'
+            year_df.to_parquet(out_dir_parquet / f'{year_out_stem}.parquet')
+            year_df.to_csv(out_dir_csv / f'{year_out_stem}.csv', index=False)
+            del year_df
+            continue
+
+        # split monthly, need to proceed further
+        year_out_dir_csv = out_dir_csv / f'{year:04d}'
+        year_out_dir_parquet = out_dir_parquet / f'{year:04d}'
+        year_out_dir_csv.mkdir(parents=True, exist_ok=True)
+        year_out_dir_parquet.mkdir(parents=True, exist_ok=True)
             
+        for month in (pbar_month := tqdm(range(1, 13), leave=False)):
+            pbar_month.set_description(f"month")
+
+            month_df = year_df.loc[month_mask[month]]
+
+            # split monthly only, don't need to proceed further
+            if not split_daily:
+                month_out_stem = f'{out_head}_{year}_{month:02d}_{out_tail}'
+                month_df.to_parquet(year_out_dir_parquet / f'{month_out_stem}.parquet')
+                month_df.to_csv(year_out_dir_csv / f'{month_out_stem}.csv', index=False)
+                del month_df
+                continue
+
+            # split daily, need to proceed further
+
+            month_out_dir_csv = out_dir_csv / str(year) / f'{month:02d}'
+            month_out_dir_parquet = out_dir_parquet / str(year) / f'{month:02d}'
+            month_out_dir_csv.mkdir(parents=True, exist_ok=True)
+            month_out_dir_parquet.mkdir(parents=True, exist_ok=True)
+
+            _, num_days = monthrange(year, month)
+
+            for day in (pbar_day := tqdm(range(1, num_days+1), leave=False)):
+                pbar_day.set_description(f"  day")
+
+                day_df = month_df.loc[day_mask[day]].reset_index()
+
+                day_out_stem = f'{out_head}_{year}_{month:02d}_{day:02d}_{out_tail}'
+                day_df.to_parquet(month_out_dir_parquet / f'{day_out_stem}.parquet')
+                day_df.to_csv(month_out_dir_csv / f'{day_out_stem}.csv', index=False)
+
+                del day_df
+
+            del month_df
+
+        del year_df
+
+
+split_by_day = functools.partial(split_by_time_unified, time_res='daily')
+split_by_month = functools.partial(split_by_time_unified, time_res='monthly')
+split_by_year = functools.partial(split_by_time_unified, time_res='yearly')
+
+
 
             
 
