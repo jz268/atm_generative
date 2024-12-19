@@ -153,20 +153,34 @@ def ddf_from_ibm_reduced(airline_path):
 
         'CRSDepTime': 'Int16', # 'string', 
         'DepTime': 'Int16', # 'string', 
+        'DepDelay': 'Int16',
 
         'CRSArrTime': 'Int16', # 'string', 
         'ArrTime': 'Int16', # 'string', 
+        'ArrDelay': 'Int16',
 
         'WheelsOff': 'string', # 'Int16', bad value, e.g. '0-71'
         'WheelsOn': 'string', # 'Int16', bad value, e.g. '0-55'
 
+        'CarrierDelay': 'Int16',  # this stuff exists 2003/06 onwards
+        'WeatherDelay': 'Int16', 
+        'NASDelay': 'Int16', 
+        'SecurityDelay': 'Int16', 
+        'LateAircraftDelay': 'Int16',
+
         'Cancelled': 'Int8', # 'boolean', 
+        'CancellationCode': 'string', # 'category'
+
+        'Diverted': 'Int8', # 'boolean', 
+        # 'DivReachedDest': 'Int8', # 'boolean'
+        # 'DivArrDelay': 'Int16',
     }
 
     ddf = dd.read_csv(airline_path, header=0, encoding='latin-1', engine="pyarrow", 
                        dtype=dtype, usecols=list(dtype.keys()))
     
-    ddf['Cancelled'] = ddf['Cancelled'].astype('boolean')
+    for col in ('Cancelled', 'Diverted'):
+        ddf[col] = ddf[col].astype('boolean')
 
     return ddf
 
@@ -186,7 +200,7 @@ def extract_airport_from_ibm_filter(airline_path, airport_iata, out_dir=None, re
         tag = 'reduced'
     else:
         ddf = ddf_from_ibm(airline_path)
-        tag = 'full'
+        tag = 'full' # this is probably not all there rn
 
     ddf = ddf[(ddf['Origin'] == airport_iata) | (ddf['Dest'] == airport_iata)]
 
@@ -213,17 +227,62 @@ def extract_airport_from_ibm_handle_issues(data_path, start_year=1995, end_year=
     for wheel in ('WheelsOff', 'WheelsOn'):
         df[wheel] = df[wheel].astype('float').astype('Int16')
 
-    actual_cols = ['DepTime', 'ArrTime', 'WheelsOff', 'WheelsOn']
+    # df.dropna(subset=['ArrTime'], inplace=True) # these are probably diverted non-reached, ignore for now?
+
+    delay_cols = ['ArrDelay', 'DepDelay']
+    split_delay_cols = ['CarrierDelay', 'WeatherDelay', 'NASDelay', 'SecurityDelay', 'LateAircraftDelay']
+    all_delay_cols = delay_cols + split_delay_cols
+    scheduled_cols = ['CRSDepTime', 'CRSArrTime']
+    actual_dep_cols = ['DepTime', 'WheelsOff']
+    actual_arr_cols = ['ArrTime', 'WheelsOn']
+    actual_cols = actual_arr_cols + actual_dep_cols
+    time_cols = scheduled_cols + actual_cols
+
+    df.loc[df['ArrDelay'] < 15, split_delay_cols] = 0 # and if all 0 then no sig delay?
+    df.loc[df['ArrTime'] == df['CRSArrTime'], all_delay_cols] = 0 # idk why these are NA but ok
+    
+    zero_delay_mask = (df['ArrDelay'] < 15) | (df['ArrTime'] == df['CRSArrTime'])
+    invalid_delay_mask = df['Diverted'] | df['Cancelled']
+    nontrivial_split_delay_mask = (~zero_delay_mask) & (~invalid_delay_mask)
+    total_split_delays = df[split_delay_cols].sum(axis=1)
+    print("\nnontrivial split delays that don't sum to arrival delay:")
+    print(df.loc[
+        nontrivial_split_delay_mask &
+        (df['ArrDelay'] != total_split_delays),
+        time_cols + delay_cols + split_delay_cols]
+    )
+    nsdm_sum = nontrivial_split_delay_mask.sum()
+    nsdm_len = len(nontrivial_split_delay_mask)
+    print(f'total nontrivial split delays: {nsdm_sum} / {nsdm_len} = {nsdm_sum / nsdm_len}')
+
+    # no actual delay should be this, we treat diverted flights similarly to cancelled?
+    # TODO: there is probably a nicer way to handle this
+    # one idea is that diverted flights still depart but may or may not make it
+    df.loc[df['Diverted'], all_delay_cols] = 9999 
+    df.loc[df['Cancelled'], all_delay_cols] = 9999 
+    # df.loc[df['Diverted'], actual_arr_cols] = 9999
+    df.loc[df['Diverted'] & df['ArrTime'].isna(), actual_arr_cols] = 9999
     df.loc[df['Cancelled'], actual_cols] = 9999
 
-    df['Reporting_Airline'] = df['Reporting_Airline'].astype('category')
+    # print(df.loc[df['WheelsOn'].isna(), time_cols])
+
+    # mostly was just for help in cleaning? the arr dep delays are a tad strange
+    # print(df.loc[df['DepDelay'].isna(), time_cols])
+    df.drop(['ArrDelay', 'DepDelay'], axis=1, inplace=True)
+
+    # for non-cancelled, not same as missing
+    df.loc[~df['Cancelled'], 'CancellationCode'] = 'Z' 
 
     df = df.sort_values(by=['FlightDate', 'CRSDepTime'])
 
-    string_cols = ['Origin', 'Dest', 'Tail_Number', 'Flight_Number_Reporting_Airline']
+    string_cols = [
+        'Origin', 'Dest', 
+        'Tail_Number', 'Flight_Number_Reporting_Airline', 
+        'Reporting_Airline', 'CancellationCode'
+    ]
     df.replace({col:{'':np.nan} for col in string_cols}, inplace=True)
 
-    print("missing data, before drop:")
+    print("\nmissing data, before drop:")
     print(pd.concat([df.isna().sum(), df.isna().sum() / len(df)], axis=1))
 
     ba_cols = [
@@ -234,8 +293,12 @@ def extract_airport_from_ibm_handle_issues(data_path, start_year=1995, end_year=
     # i think the ~0.24% missing ArrTime is maybe diversions that don't make it?
     df.dropna(subset=ba_cols, inplace=True)
 
-    print("missing data, after drop:")
+    print("\nmissing data, after drop:")
     print(pd.concat([df.isna().sum(), df.isna().sum() / len(df)], axis=1))
+
+    # make categories
+    df['Reporting_Airline'] = df['Reporting_Airline'].astype('category')
+    df['CancellationCode'] = df['CancellationCode'].astype('category')
 
     df.reset_index(drop=True, inplace=True)
 
@@ -276,7 +339,7 @@ def repair_targeted(path, date, flight_number, col, old_value, new_value):
     # setting value
     df.at[idx, col] = new_value
 
-    print(f'replacing {old_value} with {new_value} in {date} flight {flight_number} :)')
+    print(f'{col}: replacing {old_value} with {new_value} in {date} flight {flight_number} :)')
 
     df.to_parquet(path)
     df.to_csv(path.with_suffix('.csv'), index=False)
