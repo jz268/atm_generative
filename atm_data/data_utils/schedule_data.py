@@ -344,111 +344,6 @@ def split_initial_work(data_path, out_dir, time_res):
     )
 
 
-# def split_by_year(data_path, out_dir=None):
-
-#     (
-#         data_path, out_dir, 
-#         start_year, end_year, 
-#         out_head, out_tail, 
-#         out_dir_parquet, out_dir_csv, 
-#         df, df_date 
-#     ) = \
-#         split_initial_work(data_path, out_dir, 'yearly')
-    
-#     for year in (pbar_year := tqdm(range(start_year, end_year+1))):
-#         pbar_year.set_description(f" year")
-
-#         current_out_dir_csv = out_dir_csv
-#         current_out_dir_parquet = out_dir_parquet
-#         current_out_dir_csv.mkdir(parents=True, exist_ok=True)
-#         current_out_dir_parquet.mkdir(parents=True, exist_ok=True)
-
-#         year_df = df.loc[df_date.year == year]
-#         current_df = year_df.reset_index(drop=True)
-
-#         current_out_stem = f'{out_head}_{year}_{out_tail}'
-#         current_df.to_parquet(current_out_dir_parquet / f'{current_out_stem}.parquet')
-#         current_df.to_csv(current_out_dir_csv / f'{current_out_stem}.csv', index=False)
-    
-    
-# def split_by_month(data_path, out_dir=None): 
-
-#     (
-#         data_path, out_dir, 
-#         start_year, end_year, 
-#         out_head, out_tail, 
-#         out_dir_parquet, out_dir_csv, 
-#         df, year_mask, month_mask, day_mask
-#     ) = \
-#         split_initial_work(data_path, out_dir, 'monthly')
-
-#     for year in (pbar_year := tqdm(range(start_year, end_year+1))):
-#         pbar_year.set_description(f" year")
-
-#         current_out_dir_csv = out_dir_csv / str(year)
-#         current_out_dir_parquet = out_dir_parquet / str(year)
-#         current_out_dir_csv.mkdir(parents=True, exist_ok=True)
-#         current_out_dir_parquet.mkdir(parents=True, exist_ok=True)
-
-#         year_df = df.loc[year_mask[year]]
-
-#         for month in (pbar_month := tqdm(range(1, 13), leave=False)):
-#             pbar_month.set_description(f"month")
-
-#             month_df = year_df.loc[month_mask[month]].reset_index(drop=True)
-
-#             current_out_stem = f'{out_head}_{year}_{month:02d}_{out_tail}'
-#             month_df.to_parquet(current_out_dir_parquet / f'{current_out_stem}.parquet')
-#             month_df.to_csv(current_out_dir_csv / f'{current_out_stem}.csv', index=False)
-        
-#         del month_df
-
-#     del year_df
-
-
-# def split_by_day(data_path, out_dir=None): 
-
-#     (
-#         data_path, out_dir, 
-#         start_year, end_year, 
-#         out_head, out_tail, 
-#         out_dir_parquet, out_dir_csv, 
-#         df, year_mask, month_mask, day_mask
-#     ) = \
-#         split_initial_work(data_path, out_dir, 'daily')
-
-#     for year in (pbar_year := tqdm(range(start_year, end_year+1))):
-#         pbar_year.set_description(f" year")
-
-#         year_df = df.loc[year_mask[year]]
-  
-#         for month in (pbar_month := tqdm(range(1, 13), leave=False)):
-#             pbar_month.set_description(f"month")
-
-#             current_out_dir_csv = out_dir_csv / str(year) / f'{month:02d}'
-#             current_out_dir_parquet = out_dir_parquet / str(year) / f'{month:02d}'
-#             current_out_dir_csv.mkdir(parents=True, exist_ok=True)
-#             current_out_dir_parquet.mkdir(parents=True, exist_ok=True)
-
-#             month_df = year_df.loc[month_mask[month]]
-#             _, num_days = monthrange(year, month)
-
-#             for day in (pbar_day := tqdm(range(1, num_days+1), leave=False)):
-#                 pbar_day.set_description(f"  day")
-
-#                 day_df = month_df.loc[day_mask[day]].reset_index()
-
-#                 current_out_stem = f'{out_head}_{year}_{month:02d}_{day:02d}_{out_tail}'
-#                 day_df.to_parquet(current_out_dir_parquet / f'{current_out_stem}.parquet')
-#                 day_df.to_csv(current_out_dir_csv / f'{current_out_stem}.csv', index=False)
-
-#                 del day_df
-
-#             del month_df
-
-#         del year_df
-
-
 def split_by_time_unified(data_path, time_res, out_dir=None): 
 
     (
@@ -461,7 +356,7 @@ def split_by_time_unified(data_path, time_res, out_dir=None):
     ) = \
         split_initial_work(data_path, out_dir, time_res)
 
-    for year in (pbar_year := tqdm(range(start_year, end_year+1))):
+    for year in (pbar_year := tqdm(range(start_year, end_year+1), leave=False)):
         pbar_year.set_description(f" year")
 
         year_df = df.loc[year_mask[year]]
