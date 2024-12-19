@@ -304,6 +304,16 @@ def extract_airport_from_ibm_handle_issues(data_path, start_year=1995, end_year=
 
     print(df.dtypes)
 
+    # manual fixes
+    if start_year <= 2004 <= end_year:
+        df.loc[
+            (df['Flight_Number_Reporting_Airline'] == '5413') &
+            (df['FlightDate'] == pd.to_datetime('2004-08-21')),
+            'DepTime' 
+        ] = 1600
+        print(f'DepTime: replacing 160 with 1600 in 2004-08-21 flight 5413 :)')
+
+
     out_path_stem = f'{data_path.stem[:-4]}_{start_year}-{end_year}_clean'
     df.to_parquet(data_path.parent / f'{out_path_stem}.parquet')
     df.to_csv(data_path.parent / f'{out_path_stem}.csv', index=False)
