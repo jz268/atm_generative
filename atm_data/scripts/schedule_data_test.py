@@ -16,21 +16,9 @@ start_year = 1995
 end_year = 2019
 lga_clean_path = schedule_data_dir / f'lga_reduced_{start_year}-{end_year}_clean.parquet'
 
-
 # extract_airport_from_ibm_filter(airline_path, 'LGA', schedule_data_dir)
-extract_airport_from_ibm_handle_issues(lga_reduced_path, start_year, end_year)
+# extract_airport_from_ibm_handle_issues(lga_reduced_path, start_year, end_year)
 # split_by_month(lga_clean_path)
 
-# clean_airport_extracted(schedule_data_dir / 'lga_all_1987-2020.parquet', 'LGA', start_year=2019, end_year=2019)
-
-# df = pd.read_parquet(schedule_data_dir / 'lga_all_1987-2020.parquet')
-# df = df.loc[df['Year'].between(2003,2019, inclusive='both')]
-# y = len(df)
-# # x = len(df[(df['WheelsOff']=='nan')])
-# # df = df.replace('nan', pd.nan)
-# df = df.loc[(df['WheelsOff'] != 'nan') & (df['WheelsOn'] != 'nan')]
-# df = df.dropna(subset=['CRSDepTime', 'CRSArrTime', 'DepTime', 'ArrTime'])
-# x = len(df)
-
-
-# print(f'{x} / {y} = {x/y}')
+repair_path = schedule_data_dir / f'lga_reduced_1995-2019_clean/parquet/2004/lga_reduced_2004_08_clean.parquet'
+repair_targeted(repair_path, '2004-08-21', '5413', 'DepTime', 160, 1600)

@@ -243,6 +243,38 @@ def extract_airport_from_ibm_handle_issues(data_path, start_year=1995, end_year=
 
 
 
+def repair_targeted(path, date, flight_number, col, old_value, new_value):
+    # for now you have to fix csv manually
+    df = pd.read_parquet(path)
+    target = ((df['FlightDate'] == pd.to_datetime(date)) & 
+        (df['Flight_Number_Reporting_Airline'] == flight_number))
+    idx_list = df.index[target].tolist()
+    assert(len(idx_list) == 1, "flight number should be unique in a day")
+    idx = idx_list[0]
+    
+    # safety check
+    if old_value == new_value:
+        print(f"warning: old_value ({old_value}) same as new_value ({new_value})")
+    if df.at[idx, col] != old_value:
+        print()
+        raise ValueError(
+            f"\n   old_value ({old_value}) and existing value ({df.at[idx, col]}) don't match...\n" +
+            "   are you sure you're changing the right value?")
+    # setting value
+    df.at[idx, col] = new_value
+
+    print(f'replacing {old_value} with {new_value} in {date} flight {flight_number} :)')
+
+    df.to_parquet(path)
+
+# repair log (temporary):
+"""
+    original: 2004-08-21,BNA,LGA,OH,N458CA,5413,1405,160,1720,1955,1637,1946,False
+    fix: 160 -> 1600
+"""
+
+
+
 def split_by_year(data_path, start_year=1995, end_year=2019):
     pass
 
