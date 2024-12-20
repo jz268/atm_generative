@@ -6,3 +6,9 @@
 
 
 atm is probably more accurate for what we're interested in not atc in the repo name 
+
+```
+export CFLAGS="-I $(brew --prefix graphviz)/include"
+export LDFLAGS="-L $(brew --prefix graphviz)/lib"
+poetry add pygraphviz
+```

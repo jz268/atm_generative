@@ -101,7 +101,7 @@ msgpack = "1.1.0"
 multidict = "6.1.0"
 mutagen = "1.46.0"
 nest-asyncio = "1.6.0"
-networkx = "3.2.1"
+networkx = "^3.4.2"
 outcome = "1.2.0"
 packaging = "24.1"
 paramiko = "3.5.0"
@@ -201,6 +201,9 @@ yt-dlp = "2023.7.6"
 ytmusicapi = "1.2.1"
 zict = "3.0.0"
 zipp = "3.20.2"
+graphviz = "^0.20.3"
+pygraphviz = "^1.14"
+pydot = "^3.0.3"
 
 
 [build-system]

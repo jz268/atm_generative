@@ -8,6 +8,9 @@ import airportsdata as apd
 # import polars as pl
 from calendar import monthrange
 import functools
+import networkx as nx
+import matplotlib.pyplot as plt
+
 
 # import timezonefinder as tzf
 from atm_data.data_utils.tz_utils import get_tz_airport_iata
@@ -492,155 +495,234 @@ split_by_year = functools.partial(split_by_time_unified, time_res='yearly')
 
 
 
-            
+# we are just assuming the single airport case here, so radial is fine
 
-
-
-
-
-
-
-
-# ignore this, let's just adapt to use bayes air dataloader for
-def clean_airport_extracted(data_path, airport_iata, start_year=2000, end_year=2019):
-
+def visualize_schedule(data_path, out_dir):   
     data_path = Path(data_path).resolve()
+    out_dir = Path(out_dir).resolve()
+    df = pd.read_parquet(data_path)
+    out_path = out_dir / data_path.with_suffix(".png").name
+    # print(out_path)
+    visualize_schedule_df(df, out_path)
 
-    df = pd.read_parquet(data_path) 
+def visualize_schedule_df(df, out_path):
+    cols = ['Origin', 'Dest']
 
-    df[df['Year'].between(start_year, end_year, inclusive='both')]
-    df = df.loc[~(df['WheelsOff'].str.contains('n')) & ~(df['WheelsOn'].str.contains('n'))]
-    # okay this is stupid but 
-    for wheel in ('WheelsOff', 'WheelsOn'):
-        df[wheel] = df[wheel].astype('float').astype('Int16')
+    df = df.loc[:,cols]
 
-    df = df.dropna(subset=[
-        'CRSArrTime', 'ArrTime', 
-        'CRSDepTime', 'DepTime', 
-        'WheelsOff', 'WheelsOn'
-    ])
-    # df = df.drop(['Origin','Dest'], axis=1)
+    multigraph = False
 
-    print("flight date things...")
-
-    time_cols = (
-        'CRSArrTime', 'ArrTime', 
-        'CRSDepTime', 'DepTime', 
-        'WheelsOff', 'WheelsOn'
-    )
-
-    # i think all times are local to time zone? so just need to fix the day when needed
-    for time in time_cols:
-        time_abs = time + 'Absolute'
-        df[time_abs] = df[time].clip(upper=2359)
-        df.loc[df[time_abs]%100==60,time_abs] += 40
-        n = 1945801
-        print(df['FlightDate'].iloc[n]+df[time_abs].astype(str).str.zfill(4).iloc[n])
-        # print(pd.to_datetime(df['FlightDate'].iloc[n]+df[time_abs].astype(str).str.zfill(4).iloc[n],format='%Y-%m-%d%H%M'))
-        df[time_abs] = pd.to_datetime(
-            df['FlightDate']+(df[time_abs].astype(str).str.zfill(4)), format='%Y-%m-%d%H%M')
-        # df = df.drop(time, axis=1)
+    if multigraph:
+        pass
+    else:
+        df["count"] = 1
+        total_flights = len(df)
+        df["count"] = df.groupby(cols).transform("sum")
+        df = df.drop_duplicates(
+                subset=cols, keep="first"
+            ).reset_index(drop=True)
+        df = df.sort_values(['count'], ascending=False)
         
-    df['FlightDate'] = pd.to_datetime(df['FlightDate'], format='%Y-%m-%d')
+        G = nx.from_pandas_edgelist(
+            df=df, 
+            source='Origin', 
+            target='Dest', 
+            edge_attr='count',
+            create_using=nx.DiGraph()
+        )        
 
-    print("dealing with time zones...")
+        plt.clf()
+        plt.figure(figsize=(20,16))
+        plt.title(f"scheduled flights per route for {out_path.stem}, total: {total_flights}")
 
-    ref_tz = get_tz_airport_iata(airport_iata)
+        pos=nx.nx_agraph.graphviz_layout(G, prog="twopi", root='LGA') 
+        # nx.draw_networkx(G,pos, arrows=True)
+        labels = nx.get_edge_attributes(G,'count',)
 
-    # adapted from BayesAir dataloader
-    airport_codes = pd.concat(
-        [
-            df["Origin"], 
-            df["Dest"]
-        ]
-    ).unique()
+        d = {}
+        for origin, dest, count in list(df.itertuples(index=False, name=None)):
+            if origin not in d:
+                d[origin] = 0
+            if dest not in d:
+                d[dest] = 0
+            d[origin] += count
+            d[dest] += count
 
-    # i think the airport lookup part is jsut slow as hell lol 
-    time_zones = [get_tz_airport_iata(code) for code in airport_codes]
+        style = 'arc3, rad = 0.05'
 
-    airport_time_zones = pd.DataFrame(
-        {
-            "airport_code": airport_codes,
-            "time_zone": time_zones
-        }
-    )
-
-    print("merging origin tz...")
-
-    df = df.merge(
-        airport_time_zones, 
-        left_on = 'Origin',
-        right_on = 'airport_code',
-    ).rename(columns={'time_zone': 'OriginTimeZone'})
-
-    print("merging dest tz...")
-
-    df = df.merge(
-        airport_time_zones, 
-        left_on = 'Dest',
-        right_on = 'airport_code',
-    ).rename(columns={'time_zone': 'DestTimeZone'})
-    
-    # at this point, we have df augmented with Origin and Dest time zones
-
-    # first we convert the hhmm to an actual date and time, not adjusted for timezone yet
-
-    time_cols_paired = (
-        ('CRSDepTime', 'CRSArrTime'), 
-        ('DepTime', 'ArrTime'),
-        ('WheelsOff', 'WheelsOn'),
-    )
-
-    print("adjusting for day overflows...")
-        
-    time_cols_with_tzs = (
-        ('CRSArrTime', 'DestTimeZone'), ('ArrTime', 'DestTimeZone'),
-        ('CRSDepTime', 'OriginTimeZone'), ('DepTime', 'OriginTimeZone'),
-        ('WheelsOff', 'OriginTimeZone'), ('WheelsOn', 'DestTimeZone'),
-    )
-        
-    # here, we take the times and make new absolute col where they're standardized to the ref airport tz
-    for time, time_zone in time_cols_with_tzs:
-        time_abs = time + 'Absolute'
-        # print(df[time_abs].dtypes)
-        # ugh let's just drop the ambiguous for now
-        # df[time_abs] = df[time_abs].dt.tz_localize(
-        #     time_zone, ambiguous='NaT', nonexistent='NaT').dt.tz_convert(ref_tz)
-        df[time_abs] = df.apply(
-            lambda row: row[time_abs].tz_localize(
-                row[time_zone], ambiguous='NaT', 
-                nonexistent='NaT').tz_convert(ref_tz),
-            axis=1
+        nx.draw(
+            G, pos, 
+            font_size=10,
+            with_labels=True, 
+            arrows=True,
+            nodelist=[k for k in d], 
+            node_size=[100 * d[k]**.9 for k in d],
+            connectionstyle=style,
         )
-        df = df.dropna(subset=[time_abs])
+
+        nx.draw_networkx_edge_labels(
+            G, pos,
+            edge_labels=labels, 
+            label_pos=.45,
+            font_size=10,
+            connectionstyle=style,
+        )
         
-    # make absolute hours, i.e. hours past midnight using absolute time
-    # i think we need to use this to process since negatives in the timedeltas are kinda weirdly handled?
-    for time in time_cols:
-        time_hrs = time + 'AbsoluteHours'
-        time_abs = time + 'Absolute'
-        df[time_hrs] = ((df[time_abs] - df[time_abs].dt.normalize()) / pd.Timedelta(hours=1)).astype(int)
+        plt.savefig(out_path)
 
-    # when flight crosses midnight, need to add time (for now just detect as arr < dep?)
-    for dep, arr in time_cols_paired:
-        dep_hrs = dep + 'AbsoluteHours'
-        arr_hrs = arr + 'AbsoluteHours'
-        arr_abs = arr + 'Absolute'
-        df.loc[df[arr_hrs] < df[dep_hrs], arr_hrs] += 24
-        df.loc[df[arr_hrs] < df[dep_hrs], arr_abs] += pd.Timedelta(days=1)
 
-    # adapted from BayesAir dataloader
-    dep_delay = df['DepTimeAbsoluteHours'] - df['DepTimeAbsoluteHours']
-    for col in ('DepTime', 'ArrTime', 'WheelsOff', 'WheelsOn'):
-        col_abs = col + 'Absolute'
-        col_hrs = col + 'AbsoluteHours'
-        df.loc[dep_delay < -3.0, col_hrs] += 24
-        df.loc[dep_delay < -3.0, col_abs] += pd.Timedelta(days=1)
 
-    # df = df.drop('FlightDate', axis=1)
-    df.reset_index(drop=True, inplace=True)
 
-    print(df)
-    print( str(round(sys.getsizeof(df) / 1000000,2)) + ' mb')
 
-    df.to_parquet(data_path.parent / f'{data_path.stem}_cleaned.parquet', index=False)
+
+
+
+
+
+
+
+
+
+# # ignore this, let's just adapt to use bayes air dataloader for
+# def clean_airport_extracted(data_path, airport_iata, start_year=2000, end_year=2019):
+
+#     data_path = Path(data_path).resolve()
+
+#     df = pd.read_parquet(data_path) 
+
+#     df[df['Year'].between(start_year, end_year, inclusive='both')]
+#     df = df.loc[~(df['WheelsOff'].str.contains('n')) & ~(df['WheelsOn'].str.contains('n'))]
+#     # okay this is stupid but 
+#     for wheel in ('WheelsOff', 'WheelsOn'):
+#         df[wheel] = df[wheel].astype('float').astype('Int16')
+
+#     df = df.dropna(subset=[
+#         'CRSArrTime', 'ArrTime', 
+#         'CRSDepTime', 'DepTime', 
+#         'WheelsOff', 'WheelsOn'
+#     ])
+#     # df = df.drop(['Origin','Dest'], axis=1)
+
+#     print("flight date things...")
+
+#     time_cols = (
+#         'CRSArrTime', 'ArrTime', 
+#         'CRSDepTime', 'DepTime', 
+#         'WheelsOff', 'WheelsOn'
+#     )
+
+#     # i think all times are local to time zone? so just need to fix the day when needed
+#     for time in time_cols:
+#         time_abs = time + 'Absolute'
+#         df[time_abs] = df[time].clip(upper=2359)
+#         df.loc[df[time_abs]%100==60,time_abs] += 40
+#         n = 1945801
+#         print(df['FlightDate'].iloc[n]+df[time_abs].astype(str).str.zfill(4).iloc[n])
+#         # print(pd.to_datetime(df['FlightDate'].iloc[n]+df[time_abs].astype(str).str.zfill(4).iloc[n],format='%Y-%m-%d%H%M'))
+#         df[time_abs] = pd.to_datetime(
+#             df['FlightDate']+(df[time_abs].astype(str).str.zfill(4)), format='%Y-%m-%d%H%M')
+#         # df = df.drop(time, axis=1)
+        
+#     df['FlightDate'] = pd.to_datetime(df['FlightDate'], format='%Y-%m-%d')
+
+#     print("dealing with time zones...")
+
+#     ref_tz = get_tz_airport_iata(airport_iata)
+
+#     # adapted from BayesAir dataloader
+#     airport_codes = pd.concat(
+#         [
+#             df["Origin"], 
+#             df["Dest"]
+#         ]
+#     ).unique()
+
+#     # i think the airport lookup part is jsut slow as hell lol 
+#     time_zones = [get_tz_airport_iata(code) for code in airport_codes]
+
+#     airport_time_zones = pd.DataFrame(
+#         {
+#             "airport_code": airport_codes,
+#             "time_zone": time_zones
+#         }
+#     )
+
+#     print("merging origin tz...")
+
+#     df = df.merge(
+#         airport_time_zones, 
+#         left_on = 'Origin',
+#         right_on = 'airport_code',
+#     ).rename(columns={'time_zone': 'OriginTimeZone'})
+
+#     print("merging dest tz...")
+
+#     df = df.merge(
+#         airport_time_zones, 
+#         left_on = 'Dest',
+#         right_on = 'airport_code',
+#     ).rename(columns={'time_zone': 'DestTimeZone'})
+    
+#     # at this point, we have df augmented with Origin and Dest time zones
+
+#     # first we convert the hhmm to an actual date and time, not adjusted for timezone yet
+
+#     time_cols_paired = (
+#         ('CRSDepTime', 'CRSArrTime'), 
+#         ('DepTime', 'ArrTime'),
+#         ('WheelsOff', 'WheelsOn'),
+#     )
+
+#     print("adjusting for day overflows...")
+        
+#     time_cols_with_tzs = (
+#         ('CRSArrTime', 'DestTimeZone'), ('ArrTime', 'DestTimeZone'),
+#         ('CRSDepTime', 'OriginTimeZone'), ('DepTime', 'OriginTimeZone'),
+#         ('WheelsOff', 'OriginTimeZone'), ('WheelsOn', 'DestTimeZone'),
+#     )
+        
+#     # here, we take the times and make new absolute col where they're standardized to the ref airport tz
+#     for time, time_zone in time_cols_with_tzs:
+#         time_abs = time + 'Absolute'
+#         # print(df[time_abs].dtypes)
+#         # ugh let's just drop the ambiguous for now
+#         # df[time_abs] = df[time_abs].dt.tz_localize(
+#         #     time_zone, ambiguous='NaT', nonexistent='NaT').dt.tz_convert(ref_tz)
+#         df[time_abs] = df.apply(
+#             lambda row: row[time_abs].tz_localize(
+#                 row[time_zone], ambiguous='NaT', 
+#                 nonexistent='NaT').tz_convert(ref_tz),
+#             axis=1
+#         )
+#         df = df.dropna(subset=[time_abs])
+        
+#     # make absolute hours, i.e. hours past midnight using absolute time
+#     # i think we need to use this to process since negatives in the timedeltas are kinda weirdly handled?
+#     for time in time_cols:
+#         time_hrs = time + 'AbsoluteHours'
+#         time_abs = time + 'Absolute'
+#         df[time_hrs] = ((df[time_abs] - df[time_abs].dt.normalize()) / pd.Timedelta(hours=1)).astype(int)
+
+#     # when flight crosses midnight, need to add time (for now just detect as arr < dep?)
+#     for dep, arr in time_cols_paired:
+#         dep_hrs = dep + 'AbsoluteHours'
+#         arr_hrs = arr + 'AbsoluteHours'
+#         arr_abs = arr + 'Absolute'
+#         df.loc[df[arr_hrs] < df[dep_hrs], arr_hrs] += 24
+#         df.loc[df[arr_hrs] < df[dep_hrs], arr_abs] += pd.Timedelta(days=1)
+
+#     # adapted from BayesAir dataloader
+#     dep_delay = df['DepTimeAbsoluteHours'] - df['DepTimeAbsoluteHours']
+#     for col in ('DepTime', 'ArrTime', 'WheelsOff', 'WheelsOn'):
+#         col_abs = col + 'Absolute'
+#         col_hrs = col + 'AbsoluteHours'
+#         df.loc[dep_delay < -3.0, col_hrs] += 24
+#         df.loc[dep_delay < -3.0, col_abs] += pd.Timedelta(days=1)
+
+#     # df = df.drop('FlightDate', axis=1)
+#     df.reset_index(drop=True, inplace=True)
+
+#     print(df)
+#     print( str(round(sys.getsizeof(df) / 1000000,2)) + ' mb')
+
+#     df.to_parquet(data_path.parent / f'{data_path.stem}_cleaned.parquet', index=False)

@@ -1565,6 +1565,22 @@ files = [
 ]
 
 [[package]]
+name = "graphviz"
+version = "0.20.3"
+description = "Simple Python interface for Graphviz"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "graphviz-0.20.3-py3-none-any.whl", hash = "sha256:81f848f2904515d8cd359cc611faba817598d2feaac4027b266aa3eda7b3dde5"},
+    {file = "graphviz-0.20.3.zip", hash = "sha256:09d6bc81e6a9fa392e7ba52135a9d49f1ed62526f96499325930e87ca1b5925d"},
+]
+
+[package.extras]
+dev = ["flake8", "pep8-naming", "tox (>=3)", "twine", "wheel"]
+docs = ["sphinx (>=5,<7)", "sphinx-autodoc-typehints", "sphinx-rtd-theme"]
+test = ["coverage", "pytest (>=7,<8.1)", "pytest-cov", "pytest-mock (>=3)"]
+
+[[package]]
 name = "h11"
 version = "0.14.0"
 description = "A pure-Python, bring-your-own-I/O implementation of HTTP/1.1"
@@ -2454,20 +2470,21 @@ files = [
 
 [[package]]
 name = "networkx"
-version = "3.2.1"
+version = "3.4.2"
 description = "Python package for creating and manipulating graphs and networks"
 optional = false
-python-versions = ">=3.9"
+python-versions = ">=3.10"
 files = [
-    {file = "networkx-3.2.1-py3-none-any.whl", hash = "sha256:f18c69adc97877c42332c170849c96cefa91881c99a7cb3e95b7c659ebdc1ec2"},
-    {file = "networkx-3.2.1.tar.gz", hash = "sha256:9f1bb5cf3409bf324e0a722c20bdb4c20ee39bf1c30ce8ae499c8502b0b5e0c6"},
+    {file = "networkx-3.4.2-py3-none-any.whl", hash = "sha256:df5d4365b724cf81b8c6a7312509d0c22386097011ad1abe274afd5e9d3bbc5f"},
+    {file = "networkx-3.4.2.tar.gz", hash = "sha256:307c3669428c5362aab27c8a1260aa8f47c4e91d3891f48be0141738d8d053e1"},
 ]
 
 [package.extras]
-default = ["matplotlib (>=3.5)", "numpy (>=1.22)", "pandas (>=1.4)", "scipy (>=1.9,!=1.11.0,!=1.11.1)"]
-developer = ["changelist (==0.4)", "mypy (>=1.1)", "pre-commit (>=3.2)", "rtoml"]
-doc = ["nb2plots (>=0.7)", "nbconvert (<7.9)", "numpydoc (>=1.6)", "pillow (>=9.4)", "pydata-sphinx-theme (>=0.14)", "sphinx (>=7)", "sphinx-gallery (>=0.14)", "texext (>=0.6.7)"]
-extra = ["lxml (>=4.6)", "pydot (>=1.4.2)", "pygraphviz (>=1.11)", "sympy (>=1.10)"]
+default = ["matplotlib (>=3.7)", "numpy (>=1.24)", "pandas (>=2.0)", "scipy (>=1.10,!=1.11.0,!=1.11.1)"]
+developer = ["changelist (==0.5)", "mypy (>=1.1)", "pre-commit (>=3.2)", "rtoml"]
+doc = ["intersphinx-registry", "myst-nb (>=1.1)", "numpydoc (>=1.8.0)", "pillow (>=9.4)", "pydata-sphinx-theme (>=0.15)", "sphinx (>=7.3)", "sphinx-gallery (>=0.16)", "texext (>=0.6.7)"]
+example = ["cairocffi (>=1.7)", "contextily (>=1.6)", "igraph (>=0.11)", "momepy (>=0.7.2)", "osmnx (>=1.9)", "scikit-learn (>=1.5)", "seaborn (>=0.13)"]
+extra = ["lxml (>=4.6)", "pydot (>=3.0.1)", "pygraphviz (>=1.14)", "sympy (>=1.10)"]
 test = ["pytest (>=7.2)", "pytest-cov (>=4.0)"]
 
 [[package]]
@@ -3335,6 +3352,25 @@ files = [
 typing-extensions = ">=4.6.0,<4.7.0 || >4.7.0"
 
 [[package]]
+name = "pydot"
+version = "3.0.3"
+description = "Python interface to Graphviz's Dot"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "pydot-3.0.3-py3-none-any.whl", hash = "sha256:9b0b3081e0bd362d0c61148da10eb1281ec80089b02a28cf06f9093843986f3d"},
+    {file = "pydot-3.0.3.tar.gz", hash = "sha256:5e009d97b2fff92b7a88f09ec1fd5b163f07f3b10469c927d362471d6faa0d50"},
+]
+
+[package.dependencies]
+pyparsing = ">=3.0.9"
+
+[package.extras]
+dev = ["chardet", "parameterized", "ruff"]
+release = ["zest.releaser[recommended]"]
+tests = ["chardet", "parameterized", "pytest", "pytest-cov", "pytest-xdist[psutil]", "ruff", "tox"]
+
+[[package]]
 name = "pygame"
 version = "2.4.0"
 description = "Python Game Development"
@@ -3424,6 +3460,16 @@ files = [
 
 [package.extras]
 plugins = ["importlib-metadata"]
+
+[[package]]
+name = "pygraphviz"
+version = "1.14"
+description = "Python interface to Graphviz"
+optional = false
+python-versions = ">=3.10"
+files = [
+    {file = "pygraphviz-1.14.tar.gz", hash = "sha256:c10df02377f4e39b00ae17c862f4ee7e5767317f1c6b2dfd04cea6acc7fc2bea"},
+]
 
 [[package]]
 name = "pykakasi"
@@ -5254,4 +5300,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.12"
-content-hash = "c20736ff555ce1b662f184c6bfc912e33e283ad0de539957783969cc6ab53438"
+content-hash = "5a11bfded350a8f1305751c83a8f91fd30593ba747ad9dc2908923162ff6a691"
