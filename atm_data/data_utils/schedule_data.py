@@ -476,7 +476,7 @@ def split_by_time_unified(data_path, time_res, out_dir=None):
             for day in (pbar_day := tqdm(range(1, num_days+1), leave=False)):
                 pbar_day.set_description(f"  day")
 
-                day_df = month_df.loc[day_mask[day]].reset_index()
+                day_df = month_df.loc[day_mask[day]].reset_index(drop=True)
 
                 day_out_stem = f'{out_head}_{year}_{month:02d}_{day:02d}_{out_tail}'
                 day_df.to_parquet(month_out_dir_parquet / f'{day_out_stem}.parquet')
