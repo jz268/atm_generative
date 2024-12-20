@@ -548,7 +548,7 @@ def visualize_schedule_df(df, out_path):
             d[origin] += count
             d[dest] += count
 
-        style = 'arc3, rad = 0.05'
+        style = 'arc3, rad = 0.03'
 
         nx.draw(
             G, pos, 
