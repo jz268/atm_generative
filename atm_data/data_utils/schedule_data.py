@@ -176,7 +176,7 @@ def ddf_from_ibm_reduced(airline_path):
 
         'Diverted': 'Int8', # 'boolean', 
         'DivReachedDest': 'Int8', # 'boolean' # exists 2008?/?? onwards?
-        'DivAirportLandings': 'Int8',
+        'DivAirportLandings': 'Int8', # maybe category is better. few values
         # 'DivArrDelay': 'Int16',
     }
 
