@@ -175,14 +175,15 @@ def ddf_from_ibm_reduced(airline_path):
         'CancellationCode': 'string', # 'category'
 
         'Diverted': 'Int8', # 'boolean', 
-        # 'DivReachedDest': 'Int8', # 'boolean'
+        'DivReachedDest': 'Int8', # 'boolean' # exists 2008?/?? onwards?
+        'DivAirportLandings': 'Int8',
         # 'DivArrDelay': 'Int16',
     }
 
     ddf = dd.read_csv(airline_path, header=0, encoding='latin-1', engine="pyarrow", 
                        dtype=dtype, usecols=list(dtype.keys()))
     
-    for col in ('Cancelled', 'Diverted'):
+    for col in ('Cancelled', 'Diverted', 'DivReachedDest'):
         ddf[col] = ddf[col].astype('boolean')
 
     return ddf
@@ -224,8 +225,8 @@ def extract_airport_from_ibm_handle_issues(data_path, start_year=1995, end_year=
     df['FlightDate'] = pd.to_datetime(df['FlightDate'])
     df = df.loc[df['FlightDate'].dt.year.between(start_year, end_year, inclusive='both')]
 
-    # # do somethign about the wheelson wheelsoff issues?
-    # df = df.loc[~(df['WheelsOff'].str.contains('n')) & ~(df['WheelsOn'].str.contains('n'))]
+    # empty corresponds with the non-diverted, so doesn't make sense to be true or false
+    # df['DivReachedDest'] = df['DivReachedDest'].fillna(False)
 
     for wheel in ('WheelsOff', 'WheelsOn'):
         df[wheel] = df[wheel].astype('float').astype('Int16')
@@ -316,6 +317,12 @@ def extract_airport_from_ibm_handle_issues(data_path, start_year=1995, end_year=
         ] = 1600
         print(f'DepTime: replacing 160 with 1600 in 2004-08-21 flight 5413 :)')
 
+    
+    # # merge flight number and airline -- hopefully this is good enough to avoid duplicate issue?
+    # df['Flight_Number_Reporting_Airline'] = \
+    #     df['Reporting_Airline'] + df['Flight_Number_Reporting_Airline']
+    # actually let's just do this when remapping data in BayesAir
+    # at some point maybe i should just merge the things so it's more cohesive
 
     out_path_stem = f'{data_path.stem[:-4]}_{start_year}-{end_year}_clean'
     df.to_parquet(data_path.parent / f'{out_path_stem}.parquet')

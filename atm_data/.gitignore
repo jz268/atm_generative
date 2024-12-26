@@ -10,6 +10,7 @@ data/schedule/*
 !data/schedule/lga_reduced_*-*_clean_monthly
 !data/schedule/lga_reduced_*-*_clean_yearly
 !data/schedule/lga_reduced_*-*_clean_daily
+!data/schedule/lga_reduced_2010-2019_clean.parquet
 
 !data/aspm
 data/aspm/*
