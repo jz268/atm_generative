@@ -207,107 +207,205 @@ def dl_noaa_ghcnh_airport(data_dir, code):
 #     return timezone_str
 
 
-# uses: https://www.kaggle.com/datasets/zhaodianwen/noaaweatherdatajfkairport/data
+# some of it based off https://www.kaggle.com/datasets/zhaodianwen/noaaweatherdatajfkairport/data
 
-def tryconvert(value, dt=None):
-    """
-    value -> Value to be converted
-    dt    -> data type to convert to (redundant for now)
-    """
+def try_convert_np_float64(value):
     try:
         return np.float64(value)
     except:
         return np.nan
+    
+def is_float(value: any) -> bool:
+    if value is None: 
+        return False
+    try:
+        float(value)
+        return True
+    except ValueError:
+        return False
     
 
 def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
 
     data_path = Path(data_path).resolve()
 
-    cols = [  
-        'DATE',
-        'LATITUDE',
-        'LONGITUDE',
+    col_info = { 
+        'DATE': ('date', None),
+        'LATITUDE': ('latitude', 'float'),
+        'LONGITUDE': ('longitude', 'float'),
 
-        'HourlyVisibility',
+        'HourlyVisibility': ('hourly_visibility', 'str'), # fix values
+        # some issues, 2.4V -> 2.4, 1.6V -> 1.6
+        # also a 15.6s or somethign to manually fix 
 
-        'HourlyDryBulbTemperature',
-        'HourlyDewPointTemperature',
+        'HourlyDryBulbTemperature': ('hourly_dry_bulb_temperature', 'float'),
+        'HourlyDewPointTemperature': ('hourly_dew_point_temperature', 'float'),
 
-        'HourlyRelativeHumidity',
+        'HourlyRelativeHumidity': ('hourly_relative_humidity', 'float'),
 
-        'HourlyWindSpeed',
-        'HourlyWindDirection',
-        'HourlyWindGustSpeed',
+        'HourlyWindSpeed': ('hourly_wind_speed', 'str'), # fix values
+        'HourlyWindDirection': ('hourly_wind_direction', 'str'), # VRB = variable?
+        'HourlyWindGustSpeed': ('hourly_wind_gust_speed', 'float'),
 
-        'HourlyAltimeterSetting',
+        'HourlyAltimeterSetting': ('hourly_alitmeter_setting', 'float'),
 
-        'HourlyPrecipitation',
+        'HourlyPrecipitation': ('hourly_precipitation', 'str'), # some issues with trace?
 
-        # TODO: these need adding
-        'HourlyPresentWeatherType',
-        # 'HourlySkyConditions',
-    ]
+        'HourlyPresentWeatherType': ('hourly_present_weather_type', 'str'),
+        'HourlySkyConditions': ('hourly_sky_conditions', 'str'),
+    }
+
+    col_dtype = {
+        key: value[1]
+        for key, value in col_info.items()
+        if value[1] is not None
+    }
+
+    col_map = {
+        key: value[0]
+        for key, value in col_info.items()
+        if value[0] is not None
+    }
     
     # Read data and set datetime index
-    df = pd.read_csv(data_path, usecols=cols, parse_dates=['DATE'],
-                     ).rename(columns={'DATE':'Date'})
-    df = df.set_index(pd.DatetimeIndex(df['Date'])).drop(['Date'], axis=1)
+    df = (
+        pd.read_csv(
+            data_path, 
+            usecols=list(col_info.keys()), 
+            parse_dates=['DATE'],
+            dtype=col_dtype,
+        )
+        .rename(columns=col_map)
+    )
 
-    # uhh i guess ignore ambiguous for now
-    if out_time_zone is not None:
-        time_zone = get_tz(df['LATITUDE'].iloc[0], df['LONGITUDE'].iloc[0])
-        df = df.tz_localize(time_zone, ambiguous='NaT').tz_convert(out_time_zone)
-    df.drop(['LATITUDE', 'LONGITUDE'], axis=1, inplace=True)
-    
+    df = (
+        df.set_index(
+            pd.DatetimeIndex(df['date'])
+        )
+        .drop(['date'], axis=1)
+    )
+
     # Replace '*' values with np.nan
     df.replace(to_replace='*', value=np.nan, inplace=True)
 
+    # no idea if these are meaningful or just error
+    df['hourly_visibility'] = (
+        df['hourly_visibility']
+        .str.rstrip(r's|V')
+        .astype(float)
+    )
+    df['hourly_wind_speed'] = (
+        df['hourly_wind_speed']
+        .str.rstrip(r's')
+        .astype(float)
+    )
+
+    # i think this means variable? idk what to do with it.
+    df['hourly_wind_direction'] = (
+        df['hourly_wind_direction']
+        .replace(to_replace='VRB', value=np.nan)
+        .astype(float)
+    )
+
     # Replace trace amounts of precipitation with 0
-    df['HourlyPrecipitation'].replace(to_replace='T', value='0.00', inplace=True) 
+    df['hourly_precipitation'] = (
+        df['hourly_precipitation']
+        .replace(to_replace='T', value='0.0')
+        .astype(float)
+    )
+
+    # print(df.dtypes)
+
+    # uhh i guess ignore ambiguous for now
+    if out_time_zone is not None:
+        time_zone = get_tz(
+            df['latitude'].iloc[0], 
+            df['longitude'].iloc[0]
+        )
+        df = (
+            df.tz_localize(time_zone, ambiguous='NaT')
+            .tz_convert(out_time_zone)
+        )
+    df.drop(['latitude', 'longitude'], axis=1, inplace=True)
 
     # separately handle weather conditions
-    hpwt = df['HourlyPresentWeatherType'].astype('string').fillna('')
-    hpwt = hpwt.str.split(r'[\|| |:|0-9|a-z|+|-]+')
-    hpwt = hpwt.apply(lambda x: frozenset(filter(None,x)))
-    mlb = MultiLabelBinarizer()
-    hpwt = pd.DataFrame(
-                mlb.fit_transform(hpwt.values),
-                index=hpwt.index,
-                columns=mlb.classes_
-            ).drop(['*'], axis=1
-            ).add_prefix('HPWT_')
-    hpwt = hpwt.resample('1h').apply(max)
-    hpwt = hpwt.astype('boolean')
-    # hpwt = hpwt.astype(pd.SparseDtype(bool))
-    print(hpwt)
-    print(hpwt.dtypes)
-    
-    df.drop(['HourlyPresentWeatherType'], axis=1, inplace=True)
+    hpwt = (
+        df['hourly_present_weather_type']
+        .astype('string')
+        .fillna('')
+        .str.split(r'[\|| |:|0-9|a-z|+|-]+')
+        .apply(lambda x: frozenset(filter(None,x)))
+    )
+    hpwt_set = hpwt.reset_index(drop=True)
+    df.drop(['hourly_present_weather_type'], axis=1, inplace=True)
 
-    # Convert to float
-    # df = df.apply(tryconvert)
-    for i, _ in enumerate(df.columns):
-        df.iloc[:,i] = df.iloc[:,i].apply(tryconvert)
+    mlb = MultiLabelBinarizer()
+    hpwt = (
+        pd.DataFrame(
+            mlb.fit_transform(hpwt.values),
+            index=hpwt.index,
+            columns=mlb.classes_
+        )
+        .drop(['*'], axis=1)
+        .add_prefix('hpwt_')
+        .resample('1h')
+        .apply("max")
+        .astype('boolean')
+        # .astype(pd.SparseDtype(bool))
+    )
+    # print(hpwt)
+    # print(hpwt.dtypes)
+
+    # separately handle sky conditions
+    # either empty, a number, or something like: FEW:02 2.44 BKN:07 4.88 OVC:08 8.53
+    hsc = (
+        df["hourly_sky_conditions"]
+        .str.split(' ')
+    )
+    hsc_len = hsc.apply(
+        lambda x: len(x) if type(x) is list else 0
+    )
+    hsc_lens = sorted(hsc_len.unique())
+    for l in hsc_lens:
+        print(hsc[hsc_len == l].head())
+    # so it looks like for 1, 2, 3, it's just a number(s)
+    # for 4 it's code:okta, number, code:okta, number
+    # for 5 it's number, (... 4 ...)
+    # for 6 it's code:okta, number, (... 4 ...)
+
+
+    return
 
     # separately resample wind gust speed
-    hwgs = df['HourlyWindGustSpeed'].fillna(0)
-    hwgs = hwgs.resample('1h').apply(max)
-    df.drop(['HourlyWindGustSpeed'], axis=1, inplace=True)
+    hwgs = (
+        df['hourly_wind_gust_speed']
+        .fillna(0)
+        .resample('1h')
+        .apply(max)
+    )
+    df.drop(['hourly_wind_gust_speed'], axis=1, inplace=True)
 
     # downsample to hourly rows and interpolate
-    df = df.resample('1h').last()
-    df = df.interpolate(method='time', axis=0).ffill().bfill()
-    df['HourlyWindGustSpeed'] = hwgs
+    df = (
+        df.resample('1h')
+        .last()
+        .interpolate(method='time', axis=0)
+        .ffill()
+        .bfill()
+    )
+
+    # adding things handled separately back in
+    df['hourly_wind_gust_speed'] = hwgs
+    df['hourly_present_weather_type'] = hpwt_set
     df = df.join(hpwt)
 
     df = df.convert_dtypes()
     print(df.dtypes)
 
     # Output csv based on input filename
-    data_dir, data_name = data_path.parent, data_path.stem
-    df.to_csv(data_dir / Path(data_name + '_CLEANED.csv'), float_format='%g')
-    df.to_parquet(data_dir / Path(data_name + '_CLEANED.parquet'))
+    data_dir, data_name = data_path.parent, data_path.stem.lower()
+    df.to_csv(data_dir / Path(data_name + '_cleaned.csv'), float_format='%g')
+    df.to_parquet(data_dir / Path(data_name + '_cleaned.parquet'))
 
     if verbose:
         print("Data successfully cleaned, below are some stats:")
