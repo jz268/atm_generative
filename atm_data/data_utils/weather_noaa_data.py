@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 import csv
 import sys
+import time
 
 import airportsdata as apd
 # import timezonefinder, pytz
@@ -227,6 +228,8 @@ def is_float(value: any) -> bool:
 
 def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
 
+    _exec_start_time = time.time()
+
     data_path = Path(data_path).resolve()
 
     col_info = { 
@@ -284,6 +287,8 @@ def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
         )
         .drop(['date'], axis=1)
     )
+    # drop duplicates -- i suspect it's daylight saving stuff T_T
+    df = df[~df.index.duplicated(keep='first')]
 
     # Replace '*' values with np.nan
     df.replace(to_replace='*', value=np.nan, inplace=True)
@@ -330,14 +335,12 @@ def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
 
     # separately handle weather conditions
     hpwt = (
-        df['hourly_present_weather_type']
+        df.pop('hourly_present_weather_type')
         .astype('string')
         .fillna('')
         .str.split(r'[\|| |:|0-9|a-z|+|-]+')
         .apply(lambda x: frozenset(filter(None,x)))
     )
-    hpwt_set = hpwt.reset_index(drop=True)
-    df.drop(['hourly_present_weather_type'], axis=1, inplace=True)
 
     # TODO: more sophisticated handling instead of just presence of conditions
     mlb = MultiLabelBinarizer()
@@ -348,18 +351,30 @@ def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
             columns=mlb.classes_
         )
         .drop(['*'], axis=1)
-        .add_prefix('hpwt_')
         .resample('1h')
         .apply("max")
+        .ffill()
+        .bfill()
         .astype('boolean')
         # .astype(pd.SparseDtype(bool))
     )
     # print(hpwt)
     # print(hpwt.dtypes)
+    # this is kinda slow but whatevver
+    hpwt_set = hpwt.apply(
+        lambda x: set(
+            col
+            for col in hpwt.columns.values.tolist()
+            if x[col]
+        ),
+        axis=1
+    )
+    hpwt = hpwt.add_prefix('hpwt_')
+
 
     # separately handle sky conditions
-    # either empty, a number, or something like: FEW:02 2.44 BKN:07 4.88 OVC:08 8.53
-    hsc_str = df["hourly_sky_conditions"]
+    # either empty, a number, or something like: FEW:02 2.44 BKN:07 4.88 OVC:08 8.53 ???
+    hsc_str = df.pop("hourly_sky_conditions")
     # if number, add
     # if has colon, merge with next
     def hsc_str_to_list(x):
@@ -393,8 +408,9 @@ def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
                         )                    
                     i += 1
                 elif '.' in x[i]:
+                    # assume missing height means it's clear enough to not matter
                     result.append(
-                        ['', np.nan, float(x[i])]
+                        ['', 0.0, float(x[i])]
                     )
                 # else:
                 #     print(x[i])
@@ -420,9 +436,9 @@ def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
         coverage = list('' for _ in range(3))
         amount = list(np.nan for _ in range(3))
         height = list(np.nan for _ in range(3))
-        # by default assume nothing reported doesn't impede
-        total = ['', np.nan, np.inf]
-        ceiling = ['', np.nan, np.inf]
+        # by default assume nothing reported doesn't impede?
+        total = ['', 0.0, np.inf]
+        ceiling = ['', 0.0, np.inf]
 
         if len(x) > 0:
             for i in range(len(x)):
@@ -451,25 +467,56 @@ def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
     ]
     # print(hsc_split_cols)
     # print(len(hsc_split_cols))
+    coverage_cols = [c for c in hsc_split_cols if 'coverage' in c]
+    # amount_cols = [c for c in hsc_split_cols if 'amount' in c]
+    # height_cols = [c for c in hsc_split_cols if 'height' in c]
+    # string_cols = coverage_cols
+    # float_cols = amount_cols + height_cols
 
-    # print(hsc_list.head(10).apply(remap_hsc_list).to_list())
     hsc = pd.DataFrame(
         hsc_list.apply(remap_hsc_list).to_list(), 
         columns=hsc_split_cols, 
         index=hsc_list.index
     )
-    # print(hsc.loc[hsc['hsc_layer_1_coverage'] != ''])
-    hsc['hourly_sky_conditions'] = hsc_list
-    print(hsc.dtypes)
+    # this is kinda silly but whatever
+    hsc['hourly_sky_conditions'] = hsc_list.astype('string')
+    # print(hsc.dtypes)
+    # print(hsc[hsc.index.value_counts() > 1])
 
-    return
+    hsc[coverage_cols] = hsc[coverage_cols].astype("category")
+            
+    ch_idxmin = (
+        hsc
+        .groupby(hsc.index.floor(freq='H'))
+        ['hsc_ceiling_height']
+        .idxmin()
+        .reindex(
+            pd.date_range(
+                hsc.index.min(), 
+                hsc.index.max(), 
+                freq='H'
+            ),
+            method='nearest'
+        )
+        # .ffill()
+        # .bfill()
+    )
+    # print(ch_idxmin.isnull().sum())
+    # print(ch_idxmin[ch_idxmin.isnull()])
+    # print(ch_idxmin)
 
+    hsc = hsc.loc[ch_idxmin]
+    hsc.index = ch_idxmin.index
+    # print(hsc)
+    
     # separately resample wind gust speed
     hwgs = (
         df['hourly_wind_gust_speed']
         .fillna(0)
         .resample('1h')
-        .apply(max)
+        .apply('max')
+        .ffill()
+        .bfill()
     )
     df.drop(['hourly_wind_gust_speed'], axis=1, inplace=True)
 
@@ -485,9 +532,9 @@ def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
     # adding things handled separately back in
     df['hourly_wind_gust_speed'] = hwgs
     df['hourly_present_weather_type'] = hpwt_set
-    df = df.join(hpwt)
+    df = df.join([hpwt, hsc])
 
-    df = df.convert_dtypes()
+    # df = df.convert_dtypes()
     print(df.dtypes)
 
     # Output csv based on input filename
@@ -496,19 +543,17 @@ def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
     df.to_parquet(data_dir / Path(data_name + '_cleaned.parquet'))
 
     if verbose:
+        print("")
         print("Data successfully cleaned, below are some stats:")
-        print('# of megabytes held by dataframe: ' + str(round(sys.getsizeof(df) / 1000000,2)))
-        print('# of features: ' + str(df.shape[1])) 
-        print('# of observations: ' + str(df.shape[0]))
-        print('Start date: ' + str(df.index[0]))
-        print('End date: ' + str(df.index[-1]))
-        print('# of days: ' + str((df.index[-1] - df.index[0]).days))
-        print('# of months: ' + str(round((df.index[-1] - df.index[0]).days/30,2)))
-        print('# of years: ' + str(round((df.index[-1] - df.index[0]).days/365,2)))
-
-
-
-
+        print(' -> # of megabytes held by dataframe: ' + str(round(sys.getsizeof(df) / 1000000,2)))
+        print(' -> # of features: ' + str(df.shape[1])) 
+        print(' -> # of observations: ' + str(df.shape[0]))
+        print(' -> Start date: ' + str(df.index[0]))
+        print(' -> End date: ' + str(df.index[-1]))
+        print(' -> # of days: ' + str((df.index[-1] - df.index[0]).days))
+        print(' -> # of months: ' + str(round((df.index[-1] - df.index[0]).days/30,2)))
+        print(' -> # of years: ' + str(round((df.index[-1] - df.index[0]).days/365,2)))
+        print(f'execution time: {time.time() - _exec_start_time :.03f} seconds')
 
 
 
