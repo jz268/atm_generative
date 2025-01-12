@@ -226,113 +226,8 @@ def is_float(value: any) -> bool:
         return False
     
 
-def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
 
-    _exec_start_time = time.time()
-
-    data_path = Path(data_path).resolve()
-
-    col_info = { 
-        'DATE': ('date', None),
-        'LATITUDE': ('latitude', 'float'),
-        'LONGITUDE': ('longitude', 'float'),
-
-        'HourlyVisibility': ('hourly_visibility', 'str'), # fix values
-        # some issues, 2.4V -> 2.4, 1.6V -> 1.6
-        # also a 15.6s or somethign to manually fix 
-
-        'HourlyDryBulbTemperature': ('hourly_dry_bulb_temperature', 'float'),
-        'HourlyDewPointTemperature': ('hourly_dew_point_temperature', 'float'),
-
-        'HourlyRelativeHumidity': ('hourly_relative_humidity', 'float'),
-
-        'HourlyWindSpeed': ('hourly_wind_speed', 'str'), # fix values
-        'HourlyWindDirection': ('hourly_wind_direction', 'str'), # VRB = variable?
-        'HourlyWindGustSpeed': ('hourly_wind_gust_speed', 'float'),
-
-        'HourlyAltimeterSetting': ('hourly_alitmeter_setting', 'float'),
-
-        'HourlyPrecipitation': ('hourly_precipitation', 'str'), # some issues with trace?
-
-        'HourlyPresentWeatherType': ('hourly_present_weather_type', 'str'),
-        'HourlySkyConditions': ('hourly_sky_conditions', 'str'),
-    }
-
-    col_dtype = {
-        key: value[1]
-        for key, value in col_info.items()
-        if value[1] is not None
-    }
-
-    col_map = {
-        key: value[0]
-        for key, value in col_info.items()
-        if value[0] is not None
-    }
-    
-    # Read data and set datetime index
-    df = (
-        pd.read_csv(
-            data_path, 
-            usecols=list(col_info.keys()), 
-            parse_dates=['DATE'],
-            dtype=col_dtype,
-        )
-        .rename(columns=col_map)
-    )
-
-    df = (
-        df.set_index(
-            pd.DatetimeIndex(df['date'])
-        )
-        .drop(['date'], axis=1)
-    )
-    # drop duplicates -- i suspect it's daylight saving stuff T_T
-    df = df[~df.index.duplicated(keep='first')]
-
-    # Replace '*' values with np.nan
-    df.replace(to_replace='*', value=np.nan, inplace=True)
-
-    # no idea if these are meaningful or just error
-    df['hourly_visibility'] = (
-        df['hourly_visibility']
-        .str.rstrip(r's|V')
-        .astype(float)
-    )
-    df['hourly_wind_speed'] = (
-        df['hourly_wind_speed']
-        .str.rstrip(r's')
-        .astype(float)
-    )
-
-    # i think this means variable? idk what to do with it.
-    df['hourly_wind_direction'] = (
-        df['hourly_wind_direction']
-        .replace(to_replace='VRB', value=np.nan)
-        .astype(float)
-    )
-
-    # Replace trace amounts of precipitation with 0
-    df['hourly_precipitation'] = (
-        df['hourly_precipitation']
-        .replace(to_replace='T', value='0.0')
-        .astype(float)
-    )
-
-    # print(df.dtypes)
-
-    # uhh i guess ignore ambiguous for now
-    if out_time_zone is not None:
-        time_zone = get_tz(
-            df['latitude'].iloc[0], 
-            df['longitude'].iloc[0]
-        )
-        df = (
-            df.tz_localize(time_zone, ambiguous='NaT')
-            .tz_convert(out_time_zone)
-        )
-    df.drop(['latitude', 'longitude'], axis=1, inplace=True)
-
+def process_hourly_present_weather_conditions(df):
     # separately handle weather conditions
     hpwt = (
         df.pop('hourly_present_weather_type')
@@ -370,8 +265,12 @@ def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
         axis=1
     )
     hpwt = hpwt.add_prefix('hpwt_')
+    hpwt['hourly_present_weather_type'] = hpwt_set
+
+    return hpwt
 
 
+def process_hourly_sky_conditions(df):
     # separately handle sky conditions
     # either empty, a number, or something like: FEW:02 2.44 BKN:07 4.88 OVC:08 8.53 ???
     hsc_str = df.pop("hourly_sky_conditions")
@@ -517,8 +416,126 @@ def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
     hsc = hsc.loc[ch_idxmin]
     hsc.index = ch_idxmin.index
     # print(hsc)
+
+    return hsc
+
+    
+
+def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
+
+    _exec_start_time = time.time()
+
+    data_path = Path(data_path).resolve()
+
+    col_info = { 
+        'DATE': ('date', None),
+        'LATITUDE': ('latitude', 'float'),
+        'LONGITUDE': ('longitude', 'float'),
+
+        'HourlyVisibility': ('hourly_visibility', 'str'), # fix values
+        # some issues, 2.4V -> 2.4, 1.6V -> 1.6
+        # also a 15.6s or somethign to manually fix 
+
+        'HourlyDryBulbTemperature': ('hourly_dry_bulb_temperature', 'float'),
+        'HourlyDewPointTemperature': ('hourly_dew_point_temperature', 'float'),
+
+        'HourlyRelativeHumidity': ('hourly_relative_humidity', 'float'),
+
+        'HourlyWindSpeed': ('hourly_wind_speed', 'str'), # fix values
+        'HourlyWindDirection': ('hourly_wind_direction', 'str'), # VRB = variable?
+        'HourlyWindGustSpeed': ('hourly_wind_gust_speed', 'float'),
+
+        'HourlyAltimeterSetting': ('hourly_alitmeter_setting', 'float'),
+
+        'HourlyPrecipitation': ('hourly_precipitation', 'str'), # some issues with trace?
+
+        'HourlyPresentWeatherType': ('hourly_present_weather_type', 'str'),
+        'HourlySkyConditions': ('hourly_sky_conditions', 'str'),
+    }
+
+    col_dtype = {
+        key: value[1]
+        for key, value in col_info.items()
+        if value[1] is not None
+    }
+
+    col_map = {
+        key: value[0]
+        for key, value in col_info.items()
+        if value[0] is not None
+    }
+    
+    # Read data and set datetime index
+    df = (
+        pd.read_csv(
+            data_path, 
+            usecols=list(col_info.keys()), 
+            parse_dates=['DATE'],
+            dtype=col_dtype,
+        )
+        .rename(columns=col_map)
+    )
+
+    df = (
+        df.set_index(
+            pd.DatetimeIndex(df['date'])
+        )
+        .drop(['date'], axis=1)
+    )
+    # drop duplicates -- i suspect it's daylight saving stuff T_T
+    df = df[~df.index.duplicated(keep='first')]
+
+    # Replace '*' values with np.nan
+    df.replace(to_replace='*', value=np.nan, inplace=True)
+
+    # no idea if these are meaningful or just error
+    df['hourly_visibility'] = (
+        df['hourly_visibility']
+        .str.rstrip(r's|V')
+        .astype(float)
+    )
+    df['hourly_wind_speed'] = (
+        df['hourly_wind_speed']
+        .str.rstrip(r's')
+        .astype(float)
+    )
+
+    # i think this means variable? idk what to do with it.
+    df['hourly_wind_direction'] = (
+        df['hourly_wind_direction']
+        .replace(to_replace='VRB', value=np.nan)
+        .astype(float)
+    )
+
+    # Replace trace amounts of precipitation with 0
+    df['hourly_precipitation'] = (
+        df['hourly_precipitation']
+        .replace(to_replace='T', value='0.0')
+        .astype(float)
+    )
+
+    # print(df.dtypes)
+
+    # uhh i guess ignore ambiguous for now
+    if out_time_zone is not None:
+        time_zone = get_tz(
+            df['latitude'].iloc[0], 
+            df['longitude'].iloc[0]
+        )
+        df = (
+            df.tz_localize(time_zone, ambiguous='NaT')
+            .tz_convert(out_time_zone)
+        )
+    df.drop(['latitude', 'longitude'], axis=1, inplace=True)
+
+    # separately handle some columns which require extra work
+
+    hpwt = process_hourly_present_weather_conditions(df)
+
+    hsc = process_hourly_sky_conditions(df)
     
     # separately resample wind gust speed
+    # TODO: use wind gust direction based on corresponding to speed max??
     hwgs = (
         df['hourly_wind_gust_speed']
         .fillna(0)
@@ -540,7 +557,6 @@ def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
 
     # adding things handled separately back in
     df['hourly_wind_gust_speed'] = hwgs
-    df['hourly_present_weather_type'] = hpwt_set
     df = df.join([hpwt, hsc])
 
     # df = df.convert_dtypes()
