@@ -339,6 +339,7 @@ def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
     hpwt_set = hpwt.reset_index(drop=True)
     df.drop(['hourly_present_weather_type'], axis=1, inplace=True)
 
+    # TODO: more sophisticated handling instead of just presence of conditions
     mlb = MultiLabelBinarizer()
     hpwt = (
         pd.DataFrame(
@@ -358,21 +359,108 @@ def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
 
     # separately handle sky conditions
     # either empty, a number, or something like: FEW:02 2.44 BKN:07 4.88 OVC:08 8.53
-    hsc = (
-        df["hourly_sky_conditions"]
+    hsc_str = df["hourly_sky_conditions"]
+    # if number, add
+    # if has colon, merge with next
+    def hsc_str_to_list(x):
+        result = []
+        if type(x) is list:
+            i = 0
+            while i < len(x):
+                if x[i] == 'X':
+                    if i+1 < len(x):
+                        if x[i+1] == '0.0' and ':' not in x[i+1]:
+                            i += 1
+                            continue
+                        # else:
+                        #     print(x[i+1])
+                elif ':' in x[i]:
+                    xs = x[i].split(':')
+                    if i+1 < len(x) and ':' not in x[i+1]:
+                        result.append(
+                            [
+                                xs[0], 
+                                float(xs[1].rstrip('s')),
+                                float(x[i+1].rstrip('s'))
+                            ]
+                        )
+                    else:
+                        # if xs[0] != 'CLR' and xs[0] != 'FEW':
+                        #     print(xs)
+                        # assume missing height means it's high enough to not matter
+                        result.append(
+                            [xs[0], float(xs[1]), np.inf]
+                        )                    
+                    i += 1
+                elif '.' in x[i]:
+                    result.append(
+                        ['', np.nan, float(x[i])]
+                    )
+                # else:
+                #     print(x[i])
+                i += 1
+        # for _ in range(3 - len(result)):
+        #     result.append(
+        #         ('', np.nan, np.nan)
+        #     )
+        return result
+    
+    # process into lists
+    hsc_list = (
+        hsc_str
         .str.split(' ')
+        .apply(hsc_str_to_list)
     )
-    hsc_len = hsc.apply(
-        lambda x: len(x) if type(x) is list else 0
-    )
-    hsc_lens = sorted(hsc_len.unique())
-    for l in hsc_lens:
-        print(hsc[hsc_len == l].head())
-    # so it looks like for 1, 2, 3, it's just a number(s)
-    # for 4 it's code:okta, number, code:okta, number
-    # for 5 it's number, (... 4 ...)
-    # for 6 it's code:okta, number, (... 4 ...)
+    # hsc_len = hsc_list.apply(len)
+    # hsc_lens = sorted(hsc_len.unique())
+    # for l in hsc_lens:
+    #     print(hsc_list[hsc_len == l].head(50))            
+    
+    def remap_hsc_list(x):
+        coverage = list('' for _ in range(3))
+        amount = list(np.nan for _ in range(3))
+        height = list(np.nan for _ in range(3))
+        # by default assume nothing reported doesn't impede
+        total = ['', np.nan, np.inf]
+        ceiling = ['', np.nan, np.inf]
 
+        if len(x) > 0:
+            for i in range(len(x)):
+                coverage[i], amount[i], height[i] = x[i]
+            total = x[-1]
+
+            # height of lowest layer covering more than 4 oktas
+            # lowest height with broken (BKN) or overcast (OVC) reported
+            # may be unlimited?
+            for i in range(len(x)):
+                if x[i][1] > 4 or x[i][0] == 'BKN' or x[i][1] == 'OVC':
+                    ceiling = x[i]
+                    break        
+
+        # print(coverage, amount, height, total, ceiling)
+        return coverage + amount + height + total + ceiling
+            
+    hsc_split_cols = [
+        f'hsc_layer_{l}_{s}'
+        for s in ('coverage', 'amount', 'height')
+        for l in range(1,4)
+    ] + [
+        f'hsc_{l}_{s}'
+        for l in ('total', 'ceiling')
+        for s in ('coverage', 'amount', 'height')
+    ]
+    # print(hsc_split_cols)
+    # print(len(hsc_split_cols))
+
+    # print(hsc_list.head(10).apply(remap_hsc_list).to_list())
+    hsc = pd.DataFrame(
+        hsc_list.apply(remap_hsc_list).to_list(), 
+        columns=hsc_split_cols, 
+        index=hsc_list.index
+    )
+    # print(hsc.loc[hsc['hsc_layer_1_coverage'] != ''])
+    hsc['hourly_sky_conditions'] = hsc_list
+    print(hsc.dtypes)
 
     return
 
