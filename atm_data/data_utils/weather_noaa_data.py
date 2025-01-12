@@ -421,6 +421,14 @@ def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
         #     )
         return result
     
+    def hsc_list_to_str(x):
+        s = []
+        for i in range(len(x)):
+            s.append(
+                f'{x[i][0]}:{int(x[i][1]):02d}-{x[i][2]}'
+            )
+        return " ".join(s)
+    
     # process into lists
     hsc_list = (
         hsc_str
@@ -479,7 +487,8 @@ def clean_noaa_lcdv2_file(data_path, verbose=False, out_time_zone=None):
         index=hsc_list.index
     )
     # this is kinda silly but whatever
-    hsc['hourly_sky_conditions'] = hsc_list.astype('string')
+    # hsc['hourly_sky_conditions'] = hsc_list.astype('string')
+    hsc['hourly_sky_conditions'] = hsc_list.apply(hsc_list_to_str)
     # print(hsc.dtypes)
     # print(hsc[hsc.index.value_counts() > 1])
 
